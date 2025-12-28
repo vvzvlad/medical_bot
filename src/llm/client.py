@@ -207,15 +207,16 @@ class GroqClient:
         
         return command_type
     
-    async def process_add_command(self, user_message: str) -> Dict[str, Any]:
+    async def process_add_command(self, user_message: str) -> List[Dict[str, Any]]:
         """Parse add medication command (second stage).
         
         Args:
             user_message: User's message text
             
         Returns:
-            Dict with medication_name, times, and optionally dosage
-            Example: {"medication_name": "Аспирин", "times": ["19:00"], "dosage": "200 мг"}
+            List of dicts, each with medication_name, times, and optionally dosage
+            Example single: [{"medication_name": "Аспирин", "times": ["19:00"], "dosage": "200 мг"}]
+            Example multiple: [{"medication_name": "Аспирин", "times": ["12:00"]}, {"medication_name": "Лоперамид", "times": ["12:00"]}]
             
         Raises:
             GroqAPIError: If API request fails

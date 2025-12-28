@@ -221,43 +221,73 @@ async def handle_add_command(message: Message, user_id: int, user_message: str):
         user_id: User ID
         user_message: User's message text
     """
+    medication_name = None  # Initialize to avoid UnboundLocalError in exception handler
+    
     try:
         result = await groq_client.process_add_command(user_message)
         
-        medication_name = result.get("medication_name")
-        times = result.get("times", [])
-        dosage = result.get("dosage")
+        # Handle both single medication (dict) and multiple medications (list)
+        medications_to_add = []
         
-        if not medication_name or not times:
+        if isinstance(result, list):
+            # Multiple medications
+            medications_to_add = result
+        elif isinstance(result, dict):
+            # Single medication
+            medications_to_add = [result]
+        else:
             logger.warning(
-                f"Failed to parse add command for user {user_id}",
-                extra={"result": result}
+                f"Unexpected result type from process_add_command for user {user_id}",
+                extra={"result_type": type(result).__name__, "result": result}
             )
-            await message.answer("Не удалось распознать название медикамента или время приема. Попробуйте переформулировать.")
+            await message.answer("Не удалось распознать команду. Попробуйте переформулировать.")
             return
         
-        # Add medication(s)
-        created_meds = await schedule_manager.add_medication(
-            user_id=user_id,
-            name=medication_name,
-            times=times,
-            dosage=dosage
-        )
+        # Validate and add each medication
+        added_medications = []
+        for med_data in medications_to_add:
+            medication_name = med_data.get("medication_name")
+            times = med_data.get("times", [])
+            dosage = med_data.get("dosage")
+            
+            if not medication_name or not times:
+                logger.warning(
+                    f"Failed to parse medication data for user {user_id}",
+                    extra={"med_data": med_data}
+                )
+                continue
+            
+            # Add medication
+            created_meds = await schedule_manager.add_medication(
+                user_id=user_id,
+                name=medication_name,
+                times=times,
+                dosage=dosage
+            )
+            
+            # Track added medications for response
+            times_str = " и ".join(times)
+            dosage_str = f" {dosage}" if dosage else ""
+            added_medications.append(f"{medication_name}{dosage_str} в {times_str}")
+            
+            log_operation(
+                "medication_added",
+                user_id=user_id,
+                medication_name=medication_name,
+                times=times,
+                dosage=dosage
+            )
+            logger.info(f"Added medication for user {user_id}: {medication_name} at {times_str}")
         
-        # Format response
-        times_str = " и ".join(times)
-        dosage_str = f" {dosage}" if dosage else ""
-        response = f"Добавлено: {medication_name}{dosage_str} в {times_str}"
-        
-        await message.answer(response)
-        log_operation(
-            "medication_added",
-            user_id=user_id,
-            medication_name=medication_name,
-            times=times,
-            dosage=dosage
-        )
-        logger.info(f"Added medication for user {user_id}: {medication_name} at {times_str}")
+        # Send response
+        if added_medications:
+            if len(added_medications) == 1:
+                response = f"Добавлено: {added_medications[0]}"
+            else:
+                response = "Добавлено:\n" + "\n".join(f"• {med}" for med in added_medications)
+            await message.answer(response)
+        else:
+            await message.answer("Не удалось распознать название медикамента или время приема. Попробуйте переформулировать.")
         
     except GroqAPIError as e:
         logger.error(f"LLM API error in add command for user {user_id}: {e}", exc_info=True)
