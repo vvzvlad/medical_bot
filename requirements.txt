@@ -1,0 +1,8 @@
+aiogram
+python-dotenv
+loguru
+caldav
+pytz
+httpx
+pytest
+pytest-asyncio
