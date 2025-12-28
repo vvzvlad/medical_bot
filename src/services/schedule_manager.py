@@ -289,7 +289,7 @@ class ScheduleManager:
         user_id: int,
         medication_id: int,
     ) -> None:
-        """Mark medication as taken (set current timestamp).
+        """Mark medication as taken (set current timestamp and clear reminder).
         
         Args:
             user_id: Telegram user ID
@@ -314,9 +314,10 @@ class ScheduleManager:
             )
             raise ValueError(f"Medication {medication_id} not found")
         
-        # Mark as taken
+        # Mark as taken and clear reminder
         timestamp = int(datetime.utcnow().timestamp())
         medication.last_taken = timestamp
+        medication.reminder_message_id = None  # Clear reminder so new one can be sent tomorrow
         
         await self.data_manager.save_user_data(user_data)
         logger.info(

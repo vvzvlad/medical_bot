@@ -91,33 +91,36 @@ def is_time_to_take(
     medication_time: str,
     current_time: datetime,
     last_taken: Optional[int] = None,
+    reminder_message_id: Optional[int] = None,
 ) -> bool:
     """Check if it's time to take medication.
     
     Logic:
-    - Current time must be within 1 hour after medication time
-    - If last_taken is None, return True
-    - If last_taken is set, check if it was taken on a previous day
+    - Current time must be >= medication time
+    - If last_taken is set and is today, return False (already taken)
+    - If reminder_message_id is set (reminder already sent today), return False
+    - Otherwise return True to send reminder
     
     Args:
         medication_time: Time to take medication in "HH:MM" format
         current_time: Current time in user's timezone
         last_taken: Unix timestamp of last intake or None
+        reminder_message_id: Telegram message ID of active reminder or None
         
     Returns:
-        True if it's time to take medication, False otherwise
+        True if it's time to send reminder, False otherwise
         
     Examples:
         >>> # Current time is 10:30, medication time is 10:00, never taken
-        >>> is_time_to_take("10:00", datetime(2024, 1, 1, 10, 30), None)
+        >>> is_time_to_take("10:00", datetime(2024, 1, 1, 10, 30), None, None)
         True
         
         >>> # Current time is 10:30, medication time is 10:00, taken today
-        >>> is_time_to_take("10:00", datetime(2024, 1, 1, 10, 30), 1704096000)
+        >>> is_time_to_take("10:00", datetime(2024, 1, 1, 10, 30), 1704096000, None)
         False
         
         >>> # Current time is 09:30, medication time is 10:00
-        >>> is_time_to_take("10:00", datetime(2024, 1, 1, 9, 30), None)
+        >>> is_time_to_take("10:00", datetime(2024, 1, 1, 9, 30), None, None)
         False
     """
     try:
@@ -140,40 +143,32 @@ def is_time_to_take(
             )
             return False
         
-        # Check if current time is more than 1 hour after medication time
-        # This prevents showing reminders for medications that were scheduled hours ago
-        time_diff_minutes = (current_time - med_datetime).total_seconds() / 60
-        if time_diff_minutes > 60:  # More than 1 hour passed
+        # Check if already taken today
+        if last_taken is not None:
+            last_taken_datetime = datetime.fromtimestamp(last_taken)
+            last_taken_date = last_taken_datetime.date()
+            current_date = current_time.date()
+            
+            if current_date == last_taken_date:
+                logger.debug(
+                    f"Already taken today: {medication_time}, "
+                    f"last taken: {last_taken_datetime.strftime('%Y-%m-%d %H:%M')}"
+                )
+                return False
+        
+        # Check if reminder already sent (and not yet taken)
+        # If reminder_message_id is set, it means we already sent a reminder
+        # and user hasn't clicked the button yet
+        if reminder_message_id is not None:
             logger.debug(
-                f"Too late: current {current_time.strftime('%H:%M')} is "
-                f"{time_diff_minutes:.0f} minutes after medication {medication_time}"
+                f"Reminder already sent for {medication_time}, "
+                f"message_id: {reminder_message_id}"
             )
             return False
         
-        # If never taken, it's time to take
-        if last_taken is None:
-            logger.debug(f"Time to take (never taken): {medication_time}")
-            return True
-        
-        # Check if last taken was on a previous day
-        last_taken_datetime = datetime.fromtimestamp(last_taken)
-        
-        # Compare dates (ignore time)
-        last_taken_date = last_taken_datetime.date()
-        current_date = current_time.date()
-        
-        if current_date > last_taken_date:
-            logger.debug(
-                f"Time to take (last taken on previous day): {medication_time}, "
-                f"last taken: {last_taken_date}"
-            )
-            return True
-        
-        logger.debug(
-            f"Already taken today: {medication_time}, "
-            f"last taken: {last_taken_datetime.strftime('%Y-%m-%d %H:%M')}"
-        )
-        return False
+        # Time to send reminder
+        logger.debug(f"Time to take: {medication_time}")
+        return True
         
     except (ValueError, AttributeError) as e:
         logger.error(

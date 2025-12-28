@@ -90,6 +90,7 @@ class NotificationManager:
             medication_time=medication.time,
             current_time=current_time,
             last_taken=medication.last_taken,
+            reminder_message_id=medication.reminder_message_id,
         )
     
     def format_reminder_message(self, medications: list[Medication]) -> str:
