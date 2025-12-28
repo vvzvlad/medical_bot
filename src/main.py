@@ -12,10 +12,9 @@ from src.utils import logger, setup_logger
 
 async def main():
     """Main application entry point."""
-    # Setup logging with different levels for console and file
+    # Setup logging
     setup_logger(
         console_level=settings.log_level,
-        file_level="DEBUG",  # Always log DEBUG to file
     )
     
     logger.info("=" * 60)
