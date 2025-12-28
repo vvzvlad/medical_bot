@@ -1,8 +1,14 @@
-aiogram
-python-dotenv
-loguru
-caldav
-pytz
-httpx
-pytest
-pytest-asyncio
+# Telegram Bot Framework
+aiogram==3.15.0
+
+# Configuration Management
+python-dotenv==1.0.1
+
+# Logging
+loguru==0.7.2
+
+# HTTP Client for LLM API
+httpx==0.27.2
+
+# Async File I/O
+aiofiles==24.1.0
