@@ -95,7 +95,7 @@ def is_time_to_take(
     """Check if it's time to take medication.
     
     Logic:
-    - Current time must be >= medication time (same day)
+    - Current time must be within 1 hour after medication time
     - If last_taken is None, return True
     - If last_taken is set, check if it was taken on a previous day
     
@@ -132,11 +132,21 @@ def is_time_to_take(
             microsecond=0
         )
         
-        # Check if current time is past medication time
+        # Check if current time is before medication time
         if current_time < med_datetime:
             logger.debug(
                 f"Not time yet: current {current_time.strftime('%H:%M')} < "
                 f"medication {medication_time}"
+            )
+            return False
+        
+        # Check if current time is more than 1 hour after medication time
+        # This prevents showing reminders for medications that were scheduled hours ago
+        time_diff_minutes = (current_time - med_datetime).total_seconds() / 60
+        if time_diff_minutes > 60:  # More than 1 hour passed
+            logger.debug(
+                f"Too late: current {current_time.strftime('%H:%M')} is "
+                f"{time_diff_minutes:.0f} minutes after medication {medication_time}"
             )
             return False
         
