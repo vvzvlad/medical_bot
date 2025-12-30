@@ -8,7 +8,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from loguru import logger
 
-from src.bot import handlers
+from src.bot.handlers import increment_reminders_sent, init_handlers, router
 from src.config import settings
 from src.data.storage import DataManager
 from src.llm.client import GroqClient
@@ -49,10 +49,10 @@ def init_bot() -> tuple[Bot, Dispatcher]:
     schedule_manager = ScheduleManager(data_manager)
     
     # Initialize handlers with service instances
-    handlers.init_handlers(data_manager, schedule_manager, groq_client)
+    init_handlers(data_manager, schedule_manager, groq_client)
     
     # Register router
-    dp.include_router(handlers.router)
+    dp.include_router(router)
     
     # Register startup and shutdown handlers
     dp.startup.register(on_startup)
