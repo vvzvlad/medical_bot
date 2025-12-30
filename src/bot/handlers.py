@@ -632,17 +632,51 @@ async def handle_done_command(message: Message, user_id: int, user_message: str,
             await message.answer("У вас нет медикаментов в расписании.")
             return
         
+        logger.info(f"Processing done command for user {user_id}. User message: {user_message}")
+        logger.info(f"User schedule: {schedule}")
+        
         result = await groq_client.process_done_command(user_message, schedule)
         await delete_thinking_message(thinking_msg)
         
+        logger.info(f"LLM result for done command: {result}")
+        
+        medication_name = result.get("medication_name")
+        specified_time = result.get("time")
         medication_ids = result.get("medication_ids", [])
         
         if not medication_ids:
+            logger.warning(f"No medication_ids returned by LLM for user {user_id}. User message: {user_message}")
             await message.answer("Не удалось определить, какой медикамент вы приняли. Попробуйте переформулировать.")
             return
         
-        # If multiple IDs, find the one closest to current time
-        if len(medication_ids) > 1:
+        # If user specified a time, validate it matches a scheduled time
+        if specified_time:
+            logger.info(f"User specified time: {specified_time} for medication: {medication_name}")
+            
+            # Check if any of the medication_ids have the specified time
+            matching_meds = [med for med in medications if med.id in medication_ids and med.time == specified_time]
+            
+            if not matching_meds:
+                # User specified a time that doesn't match any scheduled time
+                scheduled_times = [med.time for med in medications if med.id in medication_ids]
+                scheduled_times_str = ", ".join(sorted(set(scheduled_times)))
+                
+                logger.info(
+                    f"User {user_id} tried to record {medication_name} at {specified_time}, "
+                    f"but scheduled times are: {scheduled_times_str}"
+                )
+                
+                await message.answer(
+                    f"{medication_name} нет в расписании на {specified_time}.\n"
+                    f"Запланированное время приема: {scheduled_times_str}"
+                )
+                return
+            
+            # Use only the medications that match the specified time
+            medication_ids = [med.id for med in matching_meds]
+        
+        # If multiple IDs remain and no time was specified, find the one closest to current time
+        elif len(medication_ids) > 1:
             from datetime import datetime
             current_time = datetime.now().strftime("%H:%M")
             
@@ -665,18 +699,20 @@ async def handle_done_command(message: Message, user_id: int, user_message: str,
                 medication_ids = [closest_med.id]
         
         # Mark medication as taken
+        logger.info(f"Attempting to mark medications as taken: {medication_ids}")
         for med_id in medication_ids:
+            logger.info(f"Marking medication {med_id} as taken for user {user_id}")
             await schedule_manager.mark_medication_taken(user_id, med_id)
         
         await message.answer("Отмечено как принято ✓")
         
-        logger.info(f"Marked medication as taken for user {user_id}: {medication_ids}")
+        logger.info(f"Successfully marked medication as taken for user {user_id}: {medication_ids}")
         
     except GroqAPIError as e:
         await delete_thinking_message(thinking_msg)
         await message.answer(f"Произошла ошибка при обработке команды: {str(e)}. Попробуйте еще раз.")
     except Exception as e:
-        logger.error(f"Error marking medication as done for user {user_id}: {e}")
+        logger.error(f"Error marking medication as done for user {user_id}: {e}", exc_info=True)
         await delete_thinking_message(thinking_msg)
         await message.answer("Произошла ошибка при отметке приема.")
 
