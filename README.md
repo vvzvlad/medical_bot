@@ -42,8 +42,13 @@ cd medical_bot
 ### 2. Create Virtual Environment
 
 ```bash
-python3.11 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python3.11 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+**Important**: Always activate the virtual environment before running the bot or tests:
+```bash
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
 ### 3. Install Dependencies
@@ -98,7 +103,10 @@ User data is stored in JSON files at `data/users/{user_id}.json`. Each file cont
 
 ### Starting the Bot
 
+**Important**: Always activate the virtual environment first:
+
 ```bash
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 python -m src.main
 ```
 
@@ -311,7 +319,11 @@ For detailed architecture documentation, see [`docs/ARCHITECTURE.md`](docs/ARCHI
 
 ### Running Tests
 
+**Important**: Always activate the virtual environment before running tests:
+
 ```bash
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
 # Run all tests
 pytest
 
