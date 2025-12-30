@@ -90,6 +90,7 @@ def get_user_current_time(timezone_offset: str) -> datetime:
 def is_time_to_take(
     medication_time: str,
     current_time: datetime,
+    timezone_offset: str,
     last_taken: Optional[int] = None,
     reminder_message_id: Optional[int] = None,
 ) -> bool:
@@ -104,6 +105,7 @@ def is_time_to_take(
     Args:
         medication_time: Time to take medication in "HH:MM" format
         current_time: Current time in user's timezone
+        timezone_offset: User's timezone offset (e.g., "+03:00")
         last_taken: Unix timestamp of last intake or None
         reminder_message_id: Telegram message ID of active reminder or None
         
@@ -112,15 +114,15 @@ def is_time_to_take(
         
     Examples:
         >>> # Current time is 10:30, medication time is 10:00, never taken
-        >>> is_time_to_take("10:00", datetime(2024, 1, 1, 10, 30), None, None)
+        >>> is_time_to_take("10:00", datetime(2024, 1, 1, 10, 30), "+03:00", None, None)
         True
         
         >>> # Current time is 10:30, medication time is 10:00, taken today
-        >>> is_time_to_take("10:00", datetime(2024, 1, 1, 10, 30), 1704096000, None)
+        >>> is_time_to_take("10:00", datetime(2024, 1, 1, 10, 30), "+03:00", 1704096000, None)
         False
         
         >>> # Current time is 09:30, medication time is 10:00
-        >>> is_time_to_take("10:00", datetime(2024, 1, 1, 9, 30), None, None)
+        >>> is_time_to_take("10:00", datetime(2024, 1, 1, 9, 30), "+03:00", None, None)
         False
     """
     try:
@@ -147,23 +149,12 @@ def is_time_to_take(
         if last_taken is not None:
             # Convert last_taken UTC timestamp to user's timezone for date comparison
             last_taken_utc = datetime.utcfromtimestamp(last_taken)
-            # Apply user's timezone offset to get the date in user's timezone
-            offset = parse_timezone_offset(
-                # We need to get timezone offset from somewhere - this is a limitation
-                # For now, we'll use UTC for both comparisons to be consistent
-                "+00:00"  # This is a temporary fix - ideally we'd pass timezone_offset here
-            )
-            # Actually, let's convert current_time to UTC for comparison
-            # Since current_time is already in user's timezone, we need to convert it back to UTC
-            # But we don't have the offset here. Better approach: compare dates in user's timezone
             
-            # Convert UTC timestamp to user's timezone by applying the same offset that was used for current_time
-            # We need to reconstruct the offset from current_time
-            utc_now = datetime.utcnow()
-            timezone_offset_td = current_time - utc_now
+            # Parse timezone offset and apply it to get the date in user's timezone
+            offset = parse_timezone_offset(timezone_offset)
+            last_taken_user_tz = last_taken_utc + offset
             
-            # Apply this offset to last_taken to get it in user's timezone
-            last_taken_user_tz = last_taken_utc + timezone_offset_td
+            # Compare dates in user's timezone
             last_taken_date = last_taken_user_tz.date()
             current_date = current_time.date()
             

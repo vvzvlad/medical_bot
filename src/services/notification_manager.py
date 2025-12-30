@@ -57,7 +57,7 @@ class NotificationManager:
         # Filter medications that need reminders
         medications_to_remind = []
         for medication in user_data.medications:
-            if self.should_send_reminder(medication, current_time):
+            if self.should_send_reminder(medication, current_time, user_data.timezone_offset):
                 medications_to_remind.append(medication)
         
         # Sort by time
@@ -74,6 +74,7 @@ class NotificationManager:
         self,
         medication: Medication,
         current_time: datetime,
+        timezone_offset: str,
     ) -> bool:
         """Check if reminder should be sent for medication.
         
@@ -82,6 +83,7 @@ class NotificationManager:
         Args:
             medication: Medication instance
             current_time: Current time in user's timezone
+            timezone_offset: User's timezone offset (e.g., "+03:00")
             
         Returns:
             True if reminder should be sent, False otherwise
@@ -89,6 +91,7 @@ class NotificationManager:
         return is_time_to_take(
             medication_time=medication.time,
             current_time=current_time,
+            timezone_offset=timezone_offset,
             last_taken=medication.last_taken,
             reminder_message_id=medication.reminder_message_id,
         )

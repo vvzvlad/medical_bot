@@ -99,25 +99,22 @@ class ReminderScheduler:
         """Check all users and send reminders if needed."""
         logger.debug("Checking reminders for all users...")
         
-        # Get all user files
-        user_files = list(settings.data_dir.glob("*.json"))
+        # Get all user IDs from data manager
+        user_ids = self.data_manager.get_all_user_ids()
         
-        if not user_files:
+        if not user_ids:
             logger.debug("No users found")
             return
         
-        logger.debug(f"Checking {len(user_files)} user(s)")
+        logger.debug(f"Checking {len(user_ids)} user(s)")
         
         # Process each user
-        for user_file in user_files:
+        for user_id in user_ids:
             try:
-                user_id = int(user_file.stem)
                 await self.process_user_reminders(user_id)
-            except ValueError:
-                logger.warning(f"Invalid user file name: {user_file.name}")
             except Exception as e:
                 logger.error(
-                    f"Error processing reminders for user {user_file.stem}: {e}",
+                    f"Error processing reminders for user {user_id}: {e}",
                     exc_info=True
                 )
                 # Continue with other users even if one fails

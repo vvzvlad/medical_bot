@@ -1,5 +1,6 @@
 """Data storage manager for medication bot."""
 
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -26,6 +27,7 @@ class DataManager:
             data_dir: Directory to store user data files
         """
         self.data_dir = Path(data_dir)
+        self._locks: dict[int, asyncio.Lock] = {}  # user_id -> Lock for concurrent write safety
         self._ensure_data_dir()
     
     def _ensure_data_dir(self) -> None:
@@ -123,6 +125,7 @@ class DataManager:
         
         Uses atomic write pattern: write to temp file, then rename.
         This ensures data integrity even if write is interrupted.
+        Uses per-user locks to prevent concurrent write race conditions.
         
         Args:
             user_data: UserData instance to save
@@ -131,39 +134,46 @@ class DataManager:
             Exception: If save operation fails
         """
         user_id = user_data.user_id
-        file_path = self._get_user_file_path(user_id)
-        temp_path = self._get_temp_file_path(user_id)
         
-        try:
-            # Write to temporary file
-            data = user_data.to_dict()
-            json_content = json.dumps(data, ensure_ascii=False, indent=2)
+        # Get or create lock for this user
+        if user_id not in self._locks:
+            self._locks[user_id] = asyncio.Lock()
+        
+        # Acquire lock for this user to prevent concurrent writes
+        async with self._locks[user_id]:
+            file_path = self._get_user_file_path(user_id)
+            temp_path = self._get_temp_file_path(user_id)
             
-            async with aiofiles.open(temp_path, mode="w", encoding="utf-8") as f:
-                await f.write(json_content)
-            
-            # Atomic rename (replaces existing file)
-            temp_path.replace(file_path)
-            
-            logger.debug(f"Saved user data: {user_id}")
-            log_operation("user_data_saved", user_id=user_id, medications_count=len(user_data.medications))
-            
-        except Exception as e:
-            logger.error(
-                f"Error saving user data for {user_id}: {type(e).__name__}: {e}",
-                exc_info=True,
-                extra={"user_id": user_id, "file_path": str(file_path)}
-            )
-            # Clean up temp file if it exists
-            if temp_path.exists():
-                try:
-                    temp_path.unlink()
-                except Exception as unlink_error:
-                    logger.error(
-                        f"Failed to remove temp file for user {user_id}: {unlink_error}",
-                        exc_info=True
-                    )
-            raise
+            try:
+                # Write to temporary file
+                data = user_data.to_dict()
+                json_content = json.dumps(data, ensure_ascii=False, indent=2)
+                
+                async with aiofiles.open(temp_path, mode="w", encoding="utf-8") as f:
+                    await f.write(json_content)
+                
+                # Atomic rename (replaces existing file)
+                temp_path.replace(file_path)
+                
+                logger.debug(f"Saved user data: {user_id}")
+                log_operation("user_data_saved", user_id=user_id, medications_count=len(user_data.medications))
+                
+            except Exception as e:
+                logger.error(
+                    f"Error saving user data for {user_id}: {type(e).__name__}: {e}",
+                    exc_info=True,
+                    extra={"user_id": user_id, "file_path": str(file_path)}
+                )
+                # Clean up temp file if it exists
+                if temp_path.exists():
+                    try:
+                        temp_path.unlink()
+                    except Exception as unlink_error:
+                        logger.error(
+                            f"Failed to remove temp file for user {user_id}: {unlink_error}",
+                            exc_info=True
+                        )
+                raise
     
     async def create_user(
         self, 
