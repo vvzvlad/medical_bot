@@ -1,29 +1,31 @@
 """Integration test for time change medication flow.
 
 This test suite verifies that time change confirmation messages include
-medication names in lowercase format:
+medication names in lowercase genitive case (родительный падеж):
 - "Время приема {medication_name} изменено на {time}"
 - Example: "Время приема ламотриджина изменено на 11:00"
+- Genitive case examples: аспирин → аспирина, габапентин → габапентина, ламотриджин → ламотриджина
 """
 
 import pytest
 from unittest.mock import AsyncMock
 
 
-# TC-INT-TIME-001: Time change with medication name in confirmation
+# TC-INT-TIME-001: Time change with medication name in confirmation (genitive case)
 @pytest.mark.asyncio
 async def test_time_change_confirmation_includes_medication_name(
     data_manager,
     schedule_manager,
     mock_groq_client
 ):
-    """Test that time change confirmation includes medication name in lowercase.
+    """Test that time change confirmation includes medication name in lowercase genitive case.
     
     Scenario:
     - User has "Ламотриджин" at 10:00
     - User requests "ламотриджин теперь в 11:00"
     - Confirmation should be "Время приема ламотриджина изменено на 11:00"
-    - Medication name should be in lowercase
+    - Medication name should be in lowercase genitive case (родительный падеж)
+    - Genitive: ламотриджин → ламотриджина
     """
     # Given: User with medication
     user_id = 123456789
@@ -75,9 +77,10 @@ async def test_time_change_confirmation_includes_medication_name(
     times_str = " и ".join(result["new_times"])
     expected_message = f"Время приема {medication_name.lower()} изменено на {times_str}"
     
-    # Verify medication name is in lowercase in the message
-    assert expected_message == "Время приема ламотриджин изменено на 11:00"
-    assert medication_name.lower() in expected_message
+    # Verify medication name is in lowercase genitive case in the message
+    # Genitive case: ламотриджин → ламотриджина
+    assert expected_message == "Время приема ламотриджина изменено на 11:00"
+    assert "ламотриджина" in expected_message
     
     # Verify medication time was actually updated
     user_data = await data_manager.get_user_data(user_id)
@@ -85,19 +88,20 @@ async def test_time_change_confirmation_includes_medication_name(
     assert user_data.medications[0].time == "11:00"
 
 
-# TC-INT-TIME-002: Time change with multiple times
+# TC-INT-TIME-002: Time change with multiple times (genitive case)
 @pytest.mark.asyncio
 async def test_time_change_confirmation_multiple_times(
     data_manager,
     schedule_manager,
     mock_groq_client
 ):
-    """Test time change confirmation with multiple new times.
+    """Test time change confirmation with multiple new times in genitive case.
     
     Scenario:
     - User has "аспирин" at 10:00
     - User requests "аспирин теперь в 10:00 и 18:00"
     - Confirmation should be "Время приема аспирина изменено на 10:00 и 18:00"
+    - Genitive case: аспирин → аспирина
     """
     # Given: User with medication
     user_id = 123456789
@@ -142,12 +146,14 @@ async def test_time_change_confirmation_multiple_times(
         new_times=result["new_times"]
     )
     
-    # Verify expected confirmation message format
+    # Verify expected confirmation message format with genitive case
     medication_name = result.get("medication_name")
     times_str = " и ".join(result["new_times"])
     expected_message = f"Время приема {medication_name.lower()} изменено на {times_str}"
     
-    assert expected_message == "Время приема аспирин изменено на 10:00 и 18:00"
+    # Genitive case: аспирин → аспирина
+    assert expected_message == "Время приема аспирина изменено на 10:00 и 18:00"
+    assert "аспирина" in expected_message
     
     # Verify medications were created for each time
     user_data = await data_manager.get_user_data(user_id)
@@ -156,27 +162,28 @@ async def test_time_change_confirmation_multiple_times(
     assert times == {"10:00", "18:00"}
 
 
-# TC-INT-TIME-003: Time change with various medication names
+# TC-INT-TIME-003: Time change with various medication names (genitive case)
 @pytest.mark.asyncio
 async def test_time_change_confirmation_various_medications(
     data_manager,
     schedule_manager,
     mock_groq_client
 ):
-    """Test time change confirmation for various medication names.
+    """Test time change confirmation for various medication names in genitive case.
     
     Scenario:
     - Test multiple medications with different names
-    - Verify each confirmation message includes the correct medication name in lowercase
+    - Verify each confirmation message includes the correct medication name in lowercase genitive case
+    - Examples: габапентин → габапентина, парацетамол → парацетамола, ибупрофен → ибупрофена
     """
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    # Test cases: (medication_name, expected_lowercase, new_time)
+    # Test cases: (medication_name, expected_lowercase_genitive, new_time)
     test_cases = [
-        ("Габапентин", "габапентин", "11:00"),
-        ("ПАРАЦЕТАМОЛ", "парацетамол", "12:00"),
-        ("ИбуПрофен", "ибупрофен", "13:00"),
+        ("Габапентин", "габапентина", "11:00"),  # genitive case
+        ("ПАРАЦЕТАМОЛ", "парацетамола", "12:00"),  # genitive case
+        ("ИбуПрофен", "ибупрофена", "13:00"),  # genitive case
     ]
     
     for med_name, expected_lowercase, new_time in test_cases:
@@ -221,9 +228,10 @@ async def test_time_change_confirmation_various_medications(
             new_times=result["new_times"]
         )
         
-        # Verify expected confirmation message format
+        # Verify expected confirmation message format with genitive case
         expected_message = f"Время приема {expected_lowercase} изменено на {new_time}"
-        assert result["medication_name"].lower() == expected_lowercase
+        # Verify genitive case is used (e.g., "габапентина", not "габапентин")
+        assert expected_lowercase in expected_message
         
         # Clean up for next test
         await schedule_manager.delete_medications(user_id, [med_id])

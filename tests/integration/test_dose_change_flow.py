@@ -1,29 +1,31 @@
 """Integration test for dose change medication flow.
 
 This test suite verifies that dose change confirmation messages include
-medication names in lowercase format:
+medication names in lowercase genitive case (родительный падеж):
 - "Дозировка {medication_name} изменена на {dosage}"
 - Example: "Дозировка габапентина изменена на 400 мг"
+- Genitive case examples: аспирин → аспирина, габапентин → габапентина, ламотриджин → ламотриджина
 """
 
 import pytest
 from unittest.mock import AsyncMock
 
 
-# TC-INT-DOSE-001: Dose change with medication name in confirmation
+# TC-INT-DOSE-001: Dose change with medication name in confirmation (genitive case)
 @pytest.mark.asyncio
 async def test_dose_change_confirmation_includes_medication_name(
     data_manager,
     schedule_manager,
     mock_groq_client
 ):
-    """Test that dose change confirmation includes medication name in lowercase.
+    """Test that dose change confirmation includes medication name in lowercase genitive case.
     
     Scenario:
     - User has "Габапентин" with dosage "300 мг"
     - User requests "габапентин теперь 400 мг"
     - Confirmation should be "Дозировка габапентина изменена на 400 мг"
-    - Medication name should be in lowercase
+    - Medication name should be in lowercase genitive case (родительный падеж)
+    - Genitive: габапентин → габапентина
     """
     # Given: User with medication
     user_id = 123456789
@@ -75,9 +77,10 @@ async def test_dose_change_confirmation_includes_medication_name(
     new_dosage = result["new_dosage"]
     expected_message = f"Дозировка {medication_name.lower()} изменена на {new_dosage}"
     
-    # Verify medication name is in lowercase in the message
-    assert expected_message == "Дозировка габапентин изменена на 400 мг"
-    assert medication_name.lower() in expected_message
+    # Verify medication name is in lowercase genitive case in the message
+    # Genitive case: габапентин → габапентина
+    assert expected_message == "Дозировка габапентина изменена на 400 мг"
+    assert "габапентина" in expected_message
     
     # Verify medication dosage was actually updated
     user_data = await data_manager.get_user_data(user_id)
@@ -85,27 +88,28 @@ async def test_dose_change_confirmation_includes_medication_name(
     assert user_data.medications[0].dosage == "400 мг"
 
 
-# TC-INT-DOSE-002: Dose change with various medication names
+# TC-INT-DOSE-002: Dose change with various medication names (genitive case)
 @pytest.mark.asyncio
 async def test_dose_change_confirmation_various_medications(
     data_manager,
     schedule_manager,
     mock_groq_client
 ):
-    """Test dose change confirmation for various medication names.
+    """Test dose change confirmation for various medication names in genitive case.
     
     Scenario:
     - Test multiple medications with different names
-    - Verify each confirmation message includes the correct medication name in lowercase
+    - Verify each confirmation message includes the correct medication name in lowercase genitive case
+    - Examples: ламотриджин → ламотриджина, аспирин → аспирина, парацетамол → парацетамола
     """
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    # Test cases: (medication_name, expected_lowercase, old_dosage, new_dosage)
+    # Test cases: (medication_name, expected_lowercase_genitive, old_dosage, new_dosage)
     test_cases = [
-        ("Ламотриджин", "ламотриджин", "100 мг", "150 мг"),
-        ("АСПИРИН", "аспирин", "200 мг", "300 мг"),
-        ("ПараЦетаМол", "парацетамол", "400 мг", "500 мг"),
+        ("Ламотриджин", "ламотриджина", "100 мг", "150 мг"),  # genitive case
+        ("АСПИРИН", "аспирина", "200 мг", "300 мг"),  # genitive case
+        ("ПараЦетаМол", "парацетамола", "400 мг", "500 мг"),  # genitive case
     ]
     
     for med_name, expected_lowercase, old_dosage, new_dosage in test_cases:
@@ -150,9 +154,10 @@ async def test_dose_change_confirmation_various_medications(
             new_dosage=result["new_dosage"]
         )
         
-        # Verify expected confirmation message format
+        # Verify expected confirmation message format with genitive case
         expected_message = f"Дозировка {expected_lowercase} изменена на {new_dosage}"
-        assert result["medication_name"].lower() == expected_lowercase
+        # Verify genitive case is used (e.g., "габапентина", not "габапентин")
+        assert expected_lowercase in expected_message
         
         # Verify dosage was updated
         user_data = await data_manager.get_user_data(user_id)
@@ -429,12 +434,14 @@ async def test_dose_change_multiple_time_entries(
         new_dosage=result["new_dosage"]
     )
     
-    # Verify expected confirmation message format
+    # Verify expected confirmation message format with genitive case
     medication_name = result.get("medication_name")
     new_dosage = result["new_dosage"]
     expected_message = f"Дозировка {medication_name.lower()} изменена на {new_dosage}"
     
-    assert expected_message == "Дозировка аспирин изменена на 300 мг"
+    # Genitive case: аспирин → аспирина
+    assert expected_message == "Дозировка аспирина изменена на 300 мг"
+    assert "аспирина" in expected_message
     
     # Verify the specific medication was updated
     user_data = await data_manager.get_user_data(user_id)

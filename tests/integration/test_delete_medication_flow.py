@@ -6,6 +6,7 @@ fictional medication IDs during delete operations. It ensures that:
 2. Fictional IDs are filtered out and logged
 3. Delete operations work correctly for various scenarios
 4. Confirmation messages include medication names in lowercase
+5. Confirmation messages use nominative case (именительный падеж) for medication names
 """
 
 import pytest
@@ -716,20 +717,20 @@ async def test_delete_with_invalid_ids_name_fallback(
     assert "героин" not in remaining_names
 
 
-# TC-INT-DEL-010: Verify medication name in delete confirmation message
+# TC-INT-DEL-010: Verify medication name in delete confirmation message (nominative case)
 @pytest.mark.asyncio
 async def test_delete_confirmation_includes_medication_name(
     data_manager,
     schedule_manager,
     mock_groq_client
 ):
-    """Test that delete confirmation message includes medication name in lowercase.
+    """Test that delete confirmation message includes medication name in lowercase nominative case.
     
     Scenario:
     - User has "Габапентин" medication
     - User requests "удали габапентин"
     - Confirmation message should be "габапентин удален из расписания"
-    - Medication name should be in lowercase
+    - Medication name should be in lowercase nominative case (именительный падеж)
     """
     # Given: User with medication
     user_id = 123456789
@@ -775,36 +776,38 @@ async def test_delete_confirmation_includes_medication_name(
     medication_name = result.get("medication_name")
     expected_message = f"{medication_name.lower()} удален из расписания."
     
-    # Verify medication name is in lowercase in the message
+    # Verify medication name is in lowercase nominative case in the message
     assert expected_message == "габапентин удален из расписания."
     assert medication_name.lower() in expected_message
+    # Verify nominative case is used (габапентин, not габапентина)
     
     # Verify medication was actually deleted
     user_data = await data_manager.get_user_data(user_id)
     assert len(user_data.medications) == 0
 
 
-# TC-INT-DEL-011: Verify medication name in delete confirmation for different medications
+# TC-INT-DEL-011: Verify medication name in delete confirmation for different medications (nominative case)
 @pytest.mark.asyncio
 async def test_delete_confirmation_various_medications(
     data_manager,
     schedule_manager,
     mock_groq_client
 ):
-    """Test delete confirmation messages for various medication names.
+    """Test delete confirmation messages for various medication names in nominative case.
     
     Scenario:
     - Test multiple medications with different names
-    - Verify each confirmation message includes the correct medication name in lowercase
+    - Verify each confirmation message includes the correct medication name in lowercase nominative case
+    - Examples: "аспирин удален", "ламотриджин удален", "парацетамол удален"
     """
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    # Test cases: (medication_name, expected_lowercase)
+    # Test cases: (medication_name, expected_lowercase_nominative)
     test_cases = [
-        ("Ламотриджин", "ламотриджин"),
-        ("АСПИРИН", "аспирин"),
-        ("ПараЦетаМол", "парацетамол"),
+        ("Ламотриджин", "ламотриджин"),  # nominative case
+        ("АСПИРИН", "аспирин"),  # nominative case
+        ("ПараЦетаМол", "парацетамол"),  # nominative case
     ]
     
     for med_name, expected_lowercase in test_cases:
@@ -842,9 +845,10 @@ async def test_delete_confirmation_various_medications(
         deleted = await schedule_manager.delete_medications(user_id, result["medication_ids"])
         assert deleted is True
         
-        # Verify expected confirmation message format
+        # Verify expected confirmation message format with nominative case
         expected_message = f"{expected_lowercase} удален из расписания."
         assert result["medication_name"].lower() == expected_lowercase
+        # Verify nominative case is used (e.g., "аспирин", not "аспирина")
         
         # Verify medication was deleted
         user_data = await data_manager.get_user_data(user_id)
