@@ -5,10 +5,11 @@ fictional medication IDs during delete operations. It ensures that:
 1. Only valid IDs from the actual schedule are used
 2. Fictional IDs are filtered out and logged
 3. Delete operations work correctly for various scenarios
+4. Confirmation messages include medication names in lowercase
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, MagicMock
 from loguru import logger
 
 
@@ -69,13 +70,14 @@ async def test_delete_by_name_all_matching(
     schedule = await schedule_manager.get_user_schedule(user_id)
     schedule_dict = [med.to_dict() for med in schedule]
     
-    # Mock LLM to return all aspirin IDs
+    # Mock LLM to return all aspirin IDs with medication name
     async def mock_delete_all_aspirin(message, schedule):
         # Find all aspirin medications
         aspirin_meds = [med for med in schedule if med["name"] == "аспирин"]
         return {
             "status": "success",
-            "medication_ids": [med["id"] for med in aspirin_meds]
+            "medication_ids": [med["id"] for med in aspirin_meds],
+            "medication_name": "аспирин"
         }
     
     mock_groq_client.process_delete_command = AsyncMock(side_effect=mock_delete_all_aspirin)
@@ -147,14 +149,15 @@ async def test_delete_specific_time(
     schedule = await schedule_manager.get_user_schedule(user_id)
     schedule_dict = [med.to_dict() for med in schedule]
     
-    # Mock LLM to return only the 14:00 medication
+    # Mock LLM to return only the 14:00 medication with medication name
     async def mock_delete_specific_time(message, schedule):
         # Find aspirin at 14:00
         for med in schedule:
             if med["name"] == "аспирин" and med["time"] == "14:00":
                 return {
                     "status": "success",
-                    "medication_ids": [med["id"]]
+                    "medication_ids": [med["id"]],
+                    "medication_name": "аспирин"
                 }
         return {"status": "not_found"}
     
@@ -292,13 +295,14 @@ async def test_id_validation_filters_fictional_ids(
     schedule = await schedule_manager.get_user_schedule(user_id)
     schedule_dict = [med.to_dict() for med in schedule]
     
-    # Mock LLM to return fictional IDs (simulating the bug)
+    # Mock LLM to return fictional IDs (simulating the bug) with medication name
     fictional_ids = [34567, 99999, 12345]
     async def mock_delete_with_fictional_ids(message, schedule):
         # Return mix of real and fictional IDs
         return {
             "status": "success",
-            "medication_ids": [real_aspirin_id] + fictional_ids
+            "medication_ids": [real_aspirin_id] + fictional_ids,
+            "medication_name": "аспирин"
         }
     
     mock_groq_client.process_delete_command = AsyncMock(side_effect=mock_delete_with_fictional_ids)
@@ -564,7 +568,7 @@ async def test_delete_multiple_different_medications(
     schedule = await schedule_manager.get_user_schedule(user_id)
     schedule_dict = [med.to_dict() for med in schedule]
     
-    # Mock LLM to return multiple medication IDs
+    # Mock LLM to return multiple medication IDs (no single medication_name for multiple)
     async def mock_delete_multiple(message, schedule):
         ids_to_delete = []
         for med in schedule:
@@ -710,3 +714,203 @@ async def test_delete_with_invalid_ids_name_fallback(
     # Verify героин medications are gone
     remaining_names = [med.name for med in user_data.medications]
     assert "героин" not in remaining_names
+
+
+# TC-INT-DEL-010: Verify medication name in delete confirmation message
+@pytest.mark.asyncio
+async def test_delete_confirmation_includes_medication_name(
+    data_manager,
+    schedule_manager,
+    mock_groq_client
+):
+    """Test that delete confirmation message includes medication name in lowercase.
+    
+    Scenario:
+    - User has "Габапентин" medication
+    - User requests "удали габапентин"
+    - Confirmation message should be "габапентин удален из расписания"
+    - Medication name should be in lowercase
+    """
+    # Given: User with medication
+    user_id = 123456789
+    await data_manager.create_user(user_id, "+03:00")
+    
+    meds = await schedule_manager.add_medication(
+        user_id=user_id,
+        name="Габапентин",
+        times=["10:00"],
+        dosage="300 мг"
+    )
+    
+    med_id = meds[0].id
+    
+    # When: User requests to delete medication
+    user_message = "удали габапентин"
+    
+    # Get current schedule
+    schedule = await schedule_manager.get_user_schedule(user_id)
+    schedule_dict = [med.to_dict() for med in schedule]
+    
+    # Mock LLM to return medication ID and name
+    async def mock_delete_with_name(message, schedule):
+        return {
+            "status": "success",
+            "medication_ids": [med_id],
+            "medication_name": "Габапентин"
+        }
+    
+    mock_groq_client.process_delete_command = AsyncMock(side_effect=mock_delete_with_name)
+    
+    # Process delete command
+    result = await mock_groq_client.process_delete_command(user_message, schedule_dict)
+    assert result["status"] == "success"
+    assert result["medication_name"] == "Габапентин"
+    
+    # Delete medication
+    deleted = await schedule_manager.delete_medications(user_id, result["medication_ids"])
+    assert deleted is True
+    
+    # Then: Verify the expected confirmation message format
+    # According to handlers.py line 468: f"{medication_name.lower()} удален из расписания."
+    medication_name = result.get("medication_name")
+    expected_message = f"{medication_name.lower()} удален из расписания."
+    
+    # Verify medication name is in lowercase in the message
+    assert expected_message == "габапентин удален из расписания."
+    assert medication_name.lower() in expected_message
+    
+    # Verify medication was actually deleted
+    user_data = await data_manager.get_user_data(user_id)
+    assert len(user_data.medications) == 0
+
+
+# TC-INT-DEL-011: Verify medication name in delete confirmation for different medications
+@pytest.mark.asyncio
+async def test_delete_confirmation_various_medications(
+    data_manager,
+    schedule_manager,
+    mock_groq_client
+):
+    """Test delete confirmation messages for various medication names.
+    
+    Scenario:
+    - Test multiple medications with different names
+    - Verify each confirmation message includes the correct medication name in lowercase
+    """
+    user_id = 123456789
+    await data_manager.create_user(user_id, "+03:00")
+    
+    # Test cases: (medication_name, expected_lowercase)
+    test_cases = [
+        ("Ламотриджин", "ламотриджин"),
+        ("АСПИРИН", "аспирин"),
+        ("ПараЦетаМол", "парацетамол"),
+    ]
+    
+    for med_name, expected_lowercase in test_cases:
+        # Add medication
+        meds = await schedule_manager.add_medication(
+            user_id=user_id,
+            name=med_name,
+            times=["10:00"],
+            dosage="100 мг"
+        )
+        
+        med_id = meds[0].id
+        
+        # Get current schedule
+        schedule = await schedule_manager.get_user_schedule(user_id)
+        schedule_dict = [med.to_dict() for med in schedule]
+        
+        # Mock LLM to return medication ID and name
+        async def mock_delete_with_name(message, schedule, name=med_name, id=med_id):
+            return {
+                "status": "success",
+                "medication_ids": [id],
+                "medication_name": name
+            }
+        
+        mock_groq_client.process_delete_command = AsyncMock(side_effect=mock_delete_with_name)
+        
+        # Process delete command
+        result = await mock_groq_client.process_delete_command(f"удали {med_name}", schedule_dict)
+        
+        # Verify medication name is returned
+        assert result["medication_name"] == med_name
+        
+        # Delete medication
+        deleted = await schedule_manager.delete_medications(user_id, result["medication_ids"])
+        assert deleted is True
+        
+        # Verify expected confirmation message format
+        expected_message = f"{expected_lowercase} удален из расписания."
+        assert result["medication_name"].lower() == expected_lowercase
+        
+        # Verify medication was deleted
+        user_data = await data_manager.get_user_data(user_id)
+        assert len(user_data.medications) == 0
+
+
+# TC-INT-DEL-012: Verify fallback message when medication name not available
+@pytest.mark.asyncio
+async def test_delete_confirmation_without_medication_name(
+    data_manager,
+    schedule_manager,
+    mock_groq_client
+):
+    """Test delete confirmation when medication name is not provided by LLM.
+    
+    Scenario:
+    - User has medication
+    - LLM returns only medication_ids without medication_name
+    - Should use fallback message: "Медикамент удален из расписания."
+    """
+    # Given: User with medication
+    user_id = 123456789
+    await data_manager.create_user(user_id, "+03:00")
+    
+    meds = await schedule_manager.add_medication(
+        user_id=user_id,
+        name="аспирин",
+        times=["10:00"],
+        dosage="200 мг"
+    )
+    
+    med_id = meds[0].id
+    
+    # When: LLM returns result without medication_name
+    user_message = "удали"
+    
+    # Get current schedule
+    schedule = await schedule_manager.get_user_schedule(user_id)
+    schedule_dict = [med.to_dict() for med in schedule]
+    
+    # Mock LLM to return only medication_ids (no medication_name)
+    async def mock_delete_without_name(message, schedule):
+        return {
+            "status": "success",
+            "medication_ids": [med_id]
+            # Note: no medication_name field
+        }
+    
+    mock_groq_client.process_delete_command = AsyncMock(side_effect=mock_delete_without_name)
+    
+    # Process delete command
+    result = await mock_groq_client.process_delete_command(user_message, schedule_dict)
+    assert result["status"] == "success"
+    assert "medication_name" not in result
+    
+    # Delete medication
+    deleted = await schedule_manager.delete_medications(user_id, result["medication_ids"])
+    assert deleted is True
+    
+    # Then: Verify fallback message format (handlers.py line 470)
+    medication_name = result.get("medication_name")
+    if medication_name:
+        expected_message = f"{medication_name.lower()} удален из расписания."
+    else:
+        expected_message = "Медикамент удален из расписания."
+    
+    # Verify fallback message is used when name not available
+    assert medication_name is None
+    assert expected_message == "Медикамент удален из расписания."
