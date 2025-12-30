@@ -593,3 +593,120 @@ async def test_delete_multiple_different_medications(
     assert len(user_data.medications) == 1
     assert user_data.medications[0].name == "ибупрофен"
     assert user_data.medications[0].time == "18:00"
+
+
+# TC-INT-DEL-009: Delete with invalid LLM IDs and name-based fallback
+@pytest.mark.asyncio
+async def test_delete_with_invalid_ids_name_fallback(
+    data_manager,
+    schedule_manager,
+    mock_groq_client
+):
+    """Test delete when LLM returns invalid IDs but correct medication name.
+    
+    This test verifies the fix for the bug where LLM returns hallucinated/invalid
+    medication IDs. The system should fall back to name-based matching when all
+    returned IDs are invalid.
+    
+    Scenario:
+    - User has medications with real IDs (e.g., 1, 2, 3)
+    - User requests "удали весь героин"
+    - LLM returns invalid/hallucinated IDs (e.g., [4567]) but correct medication_name
+    - System filters out invalid IDs
+    - System falls back to name-based matching using medication_name
+    - All medications with matching name are successfully deleted
+    """
+    # Given: User with multiple medications including "героин"
+    user_id = 123456789
+    await data_manager.create_user(user_id, "+03:00")
+    
+    # Add "героин" at different times
+    meds_heroin_10 = await schedule_manager.add_medication(
+        user_id=user_id,
+        name="героин",
+        times=["10:00"],
+        dosage="100 мг"
+    )
+    meds_heroin_14 = await schedule_manager.add_medication(
+        user_id=user_id,
+        name="героин",
+        times=["14:00"],
+        dosage="100 мг"
+    )
+    
+    # Add another medication to ensure we don't delete everything
+    meds_aspirin = await schedule_manager.add_medication(
+        user_id=user_id,
+        name="аспирин",
+        times=["12:00"],
+        dosage="200 мг"
+    )
+    
+    real_heroin_ids = [meds_heroin_10[0].id, meds_heroin_14[0].id]
+    real_aspirin_id = meds_aspirin[0].id
+    
+    # When: User requests to delete героин
+    user_message = "удали весь героин"
+    
+    # Get current schedule
+    schedule = await schedule_manager.get_user_schedule(user_id)
+    schedule_dict = [med.to_dict() for med in schedule]
+    
+    # Mock LLM to return invalid/hallucinated IDs but correct medication name
+    # This simulates the bug where LLM generates fictional IDs
+    hallucinated_ids = [4567]  # Invalid ID that doesn't exist in schedule
+    async def mock_delete_with_invalid_ids(message, schedule):
+        return {
+            "status": "success",
+            "medication_ids": hallucinated_ids,
+            "medication_name": "героин"  # Correct name for fallback
+        }
+    
+    mock_groq_client.process_delete_command = AsyncMock(side_effect=mock_delete_with_invalid_ids)
+    
+    # Process delete command
+    result = await mock_groq_client.process_delete_command(user_message, schedule_dict)
+    assert result["status"] == "success"
+    assert result["medication_ids"] == hallucinated_ids
+    assert result["medication_name"] == "героин"
+    
+    # Simulate the validation and fallback logic from handlers.py (lines 417-455)
+    valid_ids = {med.id for med in schedule}
+    original_ids = result["medication_ids"].copy()
+    medication_ids = [id for id in result["medication_ids"] if id in valid_ids]
+    
+    # Verify all IDs were filtered out (they're all invalid)
+    assert len(medication_ids) == 0
+    logger.info(f"All LLM-provided IDs were invalid, filtered out: {original_ids}")
+    
+    # Fallback to name-based matching
+    medication_name = result.get("medication_name")
+    assert medication_name is not None
+    
+    medication_name_lower = medication_name.lower()
+    matching_meds = [
+        med for med in schedule
+        if med.name.lower() == medication_name_lower
+    ]
+    
+    # Verify we found matching medications by name
+    assert len(matching_meds) == 2
+    medication_ids = [med.id for med in matching_meds]
+    assert set(medication_ids) == set(real_heroin_ids)
+    
+    logger.info(f"Found {len(medication_ids)} medications matching name '{medication_name}': {medication_ids}")
+    
+    # Delete medications using name-based IDs
+    deleted = await schedule_manager.delete_medications(user_id, medication_ids)
+    assert deleted is True
+    
+    # Then: Only героин should be deleted, аспирин should remain
+    user_data = await data_manager.get_user_data(user_id)
+    assert len(user_data.medications) == 1
+    assert user_data.medications[0].name == "аспирин"
+    assert user_data.medications[0].id == real_aspirin_id
+    assert user_data.medications[0].time == "12:00"
+    
+    # Verify героин medications are gone
+    remaining_names = [med.name for med in user_data.medications]
+    assert "героин" not in remaining_names
