@@ -145,14 +145,32 @@ def is_time_to_take(
         
         # Check if already taken today
         if last_taken is not None:
-            last_taken_datetime = datetime.fromtimestamp(last_taken)
-            last_taken_date = last_taken_datetime.date()
+            # Convert last_taken UTC timestamp to user's timezone for date comparison
+            last_taken_utc = datetime.utcfromtimestamp(last_taken)
+            # Apply user's timezone offset to get the date in user's timezone
+            offset = parse_timezone_offset(
+                # We need to get timezone offset from somewhere - this is a limitation
+                # For now, we'll use UTC for both comparisons to be consistent
+                "+00:00"  # This is a temporary fix - ideally we'd pass timezone_offset here
+            )
+            # Actually, let's convert current_time to UTC for comparison
+            # Since current_time is already in user's timezone, we need to convert it back to UTC
+            # But we don't have the offset here. Better approach: compare dates in user's timezone
+            
+            # Convert UTC timestamp to user's timezone by applying the same offset that was used for current_time
+            # We need to reconstruct the offset from current_time
+            utc_now = datetime.utcnow()
+            timezone_offset_td = current_time - utc_now
+            
+            # Apply this offset to last_taken to get it in user's timezone
+            last_taken_user_tz = last_taken_utc + timezone_offset_td
+            last_taken_date = last_taken_user_tz.date()
             current_date = current_time.date()
             
             if current_date == last_taken_date:
                 logger.debug(
                     f"Already taken today: {medication_time}, "
-                    f"last taken: {last_taken_datetime.strftime('%Y-%m-%d %H:%M')}"
+                    f"last taken: {last_taken_user_tz.strftime('%Y-%m-%d %H:%M')} (user timezone)"
                 )
                 return False
         
