@@ -407,6 +407,7 @@ async def handle_delete_command(message: Message, user_id: int, user_message: st
             return
         
         medication_ids = result.get("medication_ids", [])
+        medication_name = result.get("medication_name")
         
         if not medication_ids:
             await message.answer("Не удалось определить, какой медикамент удалить. Попробуйте переформулировать.")
@@ -425,6 +426,33 @@ async def handle_delete_command(message: Message, user_id: int, user_message: st
                 f"Valid IDs: {list(valid_ids)}. Filtered them out.",
                 extra={"user_id": user_id, "invalid_ids": filtered_ids, "valid_ids": list(valid_ids)}
             )
+        
+        # If all IDs were filtered out, try to match by medication name
+        if not medication_ids and medication_name:
+            logger.info(
+                f"All LLM-provided IDs were invalid for user {user_id}. "
+                f"Attempting to match by medication name: {medication_name}"
+            )
+            
+            # Find all medications with matching name (case-insensitive)
+            medication_name_lower = medication_name.lower()
+            matching_meds = [
+                med for med in medications
+                if med.name.lower() == medication_name_lower
+            ]
+            
+            if matching_meds:
+                medication_ids = [med.id for med in matching_meds]
+                logger.info(
+                    f"Found {len(medication_ids)} medications matching name '{medication_name}' "
+                    f"for user {user_id}: {medication_ids}"
+                )
+            else:
+                logger.warning(
+                    f"No medications found matching name '{medication_name}' for user {user_id}"
+                )
+                await message.answer("Не удалось найти указанный медикамент в вашем расписании.")
+                return
         
         if not medication_ids:
             await message.answer("Не удалось найти указанный медикамент в вашем расписании.")
