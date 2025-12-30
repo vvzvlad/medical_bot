@@ -70,6 +70,37 @@ async def generate_onboarding_message() -> str:
         return "Привет! Я бот для управления приемом медикаментов. Для начала укажите ваш часовой пояс, например: 'моя часовая зона Москва'"
 
 
+@router.message(Command("delete_me"))
+async def handle_delete_me_command(message: Message):
+    """Handle /delete_me command - delete user data.
+    
+    Args:
+        message: Incoming message with /delete_me command
+    """
+    user_id = message.from_user.id
+    logger.info(f"Delete_me command from user {user_id}")
+    
+    try:
+        # Check if user exists
+        user_data = await data_manager.get_user_data(user_id)
+        if user_data is None:
+            await message.answer("У вас нет данных для удаления.")
+            return
+        
+        # Delete user data file
+        user_file = settings.data_dir / f"{user_id}.json"
+        if user_file.exists():
+            user_file.unlink()
+            logger.info(f"Deleted user data file for user {user_id}")
+            await message.answer("Ваши данные успешно удалены. Для начала работы отправьте любое сообщение.")
+        else:
+            await message.answer("Файл данных не найден.")
+            
+    except Exception as e:
+        logger.error(f"Error deleting user data for user {user_id}: {e}", exc_info=True)
+        await message.answer("Произошла ошибка при удалении данных.")
+
+
 @router.message(Command("stats"))
 async def handle_stats_command(message: Message):
     """Handle /stats command - show bot statistics.
