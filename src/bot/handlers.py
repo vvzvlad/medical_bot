@@ -44,13 +44,43 @@ def init_handlers(dm: DataManager, sm: ScheduleManager, gc: GroqClient):
     logger.info("Handlers initialized with service instances")
 
 
+async def send_thinking_message(message: Message) -> Optional[Message]:
+    """Send a temporary 'thinking...' message to the user.
+    
+    Args:
+        message: Original message from user
+        
+    Returns:
+        Sent thinking message or None if failed
+    """
+    try:
+        thinking_msg = await message.answer("🤔 Думаю...")
+        return thinking_msg
+    except Exception as e:
+        logger.warning(f"Failed to send thinking message: {e}")
+        return None
+
+
+async def delete_thinking_message(thinking_msg: Optional[Message]) -> None:
+    """Delete the temporary thinking message.
+    
+    Args:
+        thinking_msg: The thinking message to delete
+    """
+    if thinking_msg:
+        try:
+            await thinking_msg.delete()
+        except Exception as e:
+            logger.warning(f"Failed to delete thinking message: {e}")
+
+
 async def generate_onboarding_message() -> str:
     """Generate onboarding message using LLM.
     
     Returns:
         Welcome message with timezone setup prompt
     """
-    prompt = """Ты ассистент для управления приемом медикаментов. 
+    prompt = """Ты ассистент для управления приемом медикаментов.
 Напиши приветственное сообщение для нового пользователя.
 Сообщение должно:
 - Кратко описать возможности бота (управление расписанием приема медикаментов, напоминания)
@@ -175,6 +205,9 @@ async def handle_text_message(message: Message):
             await message.answer(onboarding_msg)
             return
         
+        # Send thinking message
+        thinking_msg = await send_thinking_message(message)
+        
         # Stage 1: Detect command type
         try:
             command_type = await groq_client.detect_command_type(user_message)
@@ -182,41 +215,45 @@ async def handle_text_message(message: Message):
             logger.info(f"Detected command type: {command_type} for user {user_id}")
         except GroqInsufficientFundsError as e:
             logger.error(f"LLM API insufficient funds for user {user_id}", exc_info=True)
+            await delete_thinking_message(thinking_msg)
             await message.answer(format_error_for_user(e))
             return
         except GroqTimeoutError as e:
             logger.warning(f"LLM API timeout for user {user_id}", exc_info=True)
+            await delete_thinking_message(thinking_msg)
             await message.answer(format_error_for_user(e))
             return
         except GroqAPIError as e:
             logger.error(f"LLM API error for user {user_id}: {e}", exc_info=True)
+            await delete_thinking_message(thinking_msg)
             await message.answer(format_error_for_user(e))
             return
         
         # Stage 2: Process command based on type
         if command_type == "list":
+            await delete_thinking_message(thinking_msg)
             await handle_list_command(message, user_id)
             
         elif command_type == "add":
-            await handle_add_command(message, user_id, user_message)
+            await handle_add_command(message, user_id, user_message, thinking_msg)
             
         elif command_type == "delete":
-            await handle_delete_command(message, user_id, user_message)
+            await handle_delete_command(message, user_id, user_message, thinking_msg)
             
         elif command_type == "time_change":
-            await handle_time_change_command(message, user_id, user_message)
+            await handle_time_change_command(message, user_id, user_message, thinking_msg)
             
         elif command_type == "dose_change":
-            await handle_dose_change_command(message, user_id, user_message)
+            await handle_dose_change_command(message, user_id, user_message, thinking_msg)
             
         elif command_type == "timezone_change":
-            await handle_timezone_change_command(message, user_id, user_message)
+            await handle_timezone_change_command(message, user_id, user_message, thinking_msg)
             
         elif command_type == "done":
-            await handle_done_command(message, user_id, user_message)
+            await handle_done_command(message, user_id, user_message, thinking_msg)
             
         else:  # unknown
-            await handle_unknown_command(message, user_message)
+            await handle_unknown_command(message, user_message, thinking_msg)
             
     except Exception as e:
         logger.error(
@@ -244,18 +281,20 @@ async def handle_list_command(message: Message, user_id: int):
         await message.answer("Произошла ошибка при получении расписания.")
 
 
-async def handle_add_command(message: Message, user_id: int, user_message: str):
+async def handle_add_command(message: Message, user_id: int, user_message: str, thinking_msg: Optional[Message] = None):
     """Handle add medication command.
     
     Args:
         message: Incoming message
         user_id: User ID
         user_message: User's message text
+        thinking_msg: Optional thinking message to delete
     """
     medication_name = None  # Initialize to avoid UnboundLocalError in exception handler
     
     try:
         result = await groq_client.process_add_command(user_message)
+        await delete_thinking_message(thinking_msg)
         
         # Handle both single medication (dict) and multiple medications (list)
         medications_to_add = []
@@ -322,6 +361,7 @@ async def handle_add_command(message: Message, user_id: int, user_message: str):
         
     except GroqAPIError as e:
         logger.error(f"LLM API error in add command for user {user_id}: {e}", exc_info=True)
+        await delete_thinking_message(thinking_msg)
         await message.answer(format_error_for_user(e))
     except Exception as e:
         logger.error(
@@ -329,16 +369,18 @@ async def handle_add_command(message: Message, user_id: int, user_message: str):
             exc_info=True,
             extra={"user_id": user_id, "medication_name": medication_name}
         )
+        await delete_thinking_message(thinking_msg)
         await message.answer(format_error_for_user(e))
 
 
-async def handle_delete_command(message: Message, user_id: int, user_message: str):
+async def handle_delete_command(message: Message, user_id: int, user_message: str, thinking_msg: Optional[Message] = None):
     """Handle delete medication command.
     
     Args:
         message: Incoming message
         user_id: User ID
         user_message: User's message text
+        thinking_msg: Optional thinking message to delete
     """
     try:
         # Get current schedule
@@ -346,10 +388,12 @@ async def handle_delete_command(message: Message, user_id: int, user_message: st
         schedule = [med.to_dict() for med in medications]
         
         if not schedule:
+            await delete_thinking_message(thinking_msg)
             await message.answer("У вас нет медикаментов в расписании.")
             return
         
         result = await groq_client.process_delete_command(user_message, schedule)
+        await delete_thinking_message(thinking_msg)
         
         status = result.get("status")
         
@@ -400,19 +444,22 @@ async def handle_delete_command(message: Message, user_id: int, user_message: st
         logger.info(f"Deleted medications for user {user_id}: {medication_ids}")
         
     except GroqAPIError as e:
+        await delete_thinking_message(thinking_msg)
         await message.answer(f"Произошла ошибка при обработке команды: {str(e)}. Попробуйте еще раз.")
     except Exception as e:
         logger.error(f"Error deleting medication for user {user_id}: {e}")
+        await delete_thinking_message(thinking_msg)
         await message.answer("Произошла ошибка при удалении медикамента.")
 
 
-async def handle_time_change_command(message: Message, user_id: int, user_message: str):
+async def handle_time_change_command(message: Message, user_id: int, user_message: str, thinking_msg: Optional[Message] = None):
     """Handle time change command.
     
     Args:
         message: Incoming message
         user_id: User ID
         user_message: User's message text
+        thinking_msg: Optional thinking message to delete
     """
     try:
         # Get current schedule
@@ -420,10 +467,12 @@ async def handle_time_change_command(message: Message, user_id: int, user_messag
         schedule = [med.to_dict() for med in medications]
         
         if not schedule:
+            await delete_thinking_message(thinking_msg)
             await message.answer("У вас нет медикаментов в расписании.")
             return
         
         result = await groq_client.process_time_change_command(user_message, schedule)
+        await delete_thinking_message(thinking_msg)
         
         status = result.get("status")
         
@@ -452,21 +501,25 @@ async def handle_time_change_command(message: Message, user_id: int, user_messag
         logger.info(f"Updated medication time for user {user_id}: {medication_id} -> {new_times}")
         
     except GroqAPIError as e:
+        await delete_thinking_message(thinking_msg)
         await message.answer(f"Произошла ошибка при обработке команды: {str(e)}. Попробуйте еще раз.")
     except ValueError as e:
+        await delete_thinking_message(thinking_msg)
         await message.answer(str(e))
     except Exception as e:
         logger.error(f"Error changing medication time for user {user_id}: {e}")
+        await delete_thinking_message(thinking_msg)
         await message.answer("Произошла ошибка при изменении времени приема.")
 
 
-async def handle_dose_change_command(message: Message, user_id: int, user_message: str):
+async def handle_dose_change_command(message: Message, user_id: int, user_message: str, thinking_msg: Optional[Message] = None):
     """Handle dose change command.
     
     Args:
         message: Incoming message
         user_id: User ID
         user_message: User's message text
+        thinking_msg: Optional thinking message to delete
     """
     try:
         # Get current schedule
@@ -474,10 +527,12 @@ async def handle_dose_change_command(message: Message, user_id: int, user_messag
         schedule = [med.to_dict() for med in medications]
         
         if not schedule:
+            await delete_thinking_message(thinking_msg)
             await message.answer("У вас нет медикаментов в расписании.")
             return
         
         result = await groq_client.process_dose_change_command(user_message, schedule)
+        await delete_thinking_message(thinking_msg)
         
         status = result.get("status")
         
@@ -505,24 +560,29 @@ async def handle_dose_change_command(message: Message, user_id: int, user_messag
         logger.info(f"Updated medication dosage for user {user_id}: {medication_id} -> {new_dosage}")
         
     except GroqAPIError as e:
+        await delete_thinking_message(thinking_msg)
         await message.answer(f"Произошла ошибка при обработке команды: {str(e)}. Попробуйте еще раз.")
     except ValueError as e:
+        await delete_thinking_message(thinking_msg)
         await message.answer(str(e))
     except Exception as e:
         logger.error(f"Error changing medication dosage for user {user_id}: {e}")
+        await delete_thinking_message(thinking_msg)
         await message.answer("Произошла ошибка при изменении дозировки.")
 
 
-async def handle_timezone_change_command(message: Message, user_id: int, user_message: str):
+async def handle_timezone_change_command(message: Message, user_id: int, user_message: str, thinking_msg: Optional[Message] = None):
     """Handle timezone change command.
     
     Args:
         message: Incoming message
         user_id: User ID
         user_message: User's message text
+        thinking_msg: Optional thinking message to delete
     """
     try:
         result = await groq_client.process_timezone_change_command(user_message)
+        await delete_thinking_message(thinking_msg)
         
         status = result.get("status")
         
@@ -545,19 +605,22 @@ async def handle_timezone_change_command(message: Message, user_id: int, user_me
         logger.info(f"Updated timezone for user {user_id}: {timezone_offset}")
         
     except GroqAPIError as e:
+        await delete_thinking_message(thinking_msg)
         await message.answer(f"Произошла ошибка при обработке команды: {str(e)}. Попробуйте еще раз.")
     except Exception as e:
         logger.error(f"Error changing timezone for user {user_id}: {e}")
+        await delete_thinking_message(thinking_msg)
         await message.answer("Произошла ошибка при изменении часового пояса.")
 
 
-async def handle_done_command(message: Message, user_id: int, user_message: str):
+async def handle_done_command(message: Message, user_id: int, user_message: str, thinking_msg: Optional[Message] = None):
     """Handle done command - mark medication as taken early.
     
     Args:
         message: Incoming message
         user_id: User ID
         user_message: User's message text
+        thinking_msg: Optional thinking message to delete
     """
     try:
         # Get current schedule
@@ -565,10 +628,12 @@ async def handle_done_command(message: Message, user_id: int, user_message: str)
         schedule = [med.to_dict() for med in medications]
         
         if not schedule:
+            await delete_thinking_message(thinking_msg)
             await message.answer("У вас нет медикаментов в расписании.")
             return
         
         result = await groq_client.process_done_command(user_message, schedule)
+        await delete_thinking_message(thinking_msg)
         
         medication_ids = result.get("medication_ids", [])
         
@@ -608,28 +673,34 @@ async def handle_done_command(message: Message, user_id: int, user_message: str)
         logger.info(f"Marked medication as taken for user {user_id}: {medication_ids}")
         
     except GroqAPIError as e:
+        await delete_thinking_message(thinking_msg)
         await message.answer(f"Произошла ошибка при обработке команды: {str(e)}. Попробуйте еще раз.")
     except Exception as e:
         logger.error(f"Error marking medication as done for user {user_id}: {e}")
+        await delete_thinking_message(thinking_msg)
         await message.answer("Произошла ошибка при отметке приема.")
 
 
-async def handle_unknown_command(message: Message, user_message: str):
+async def handle_unknown_command(message: Message, user_message: str, thinking_msg: Optional[Message] = None):
     """Handle unknown command.
     
     Args:
         message: Incoming message
         user_message: User's message text
+        thinking_msg: Optional thinking message to delete
     """
     try:
         result = await groq_client.process_unknown_command(user_message)
+        await delete_thinking_message(thinking_msg)
         error_message = result.get("message", "Извините, я не понял вашу команду. Попробуйте переформулировать.")
         await message.answer(error_message)
         
     except GroqAPIError as e:
+        await delete_thinking_message(thinking_msg)
         await message.answer("Извините, я не понял вашу команду. Попробуйте переформулировать или напишите 'что я принимаю' чтобы увидеть ваше расписание.")
     except Exception as e:
         logger.error(f"Error handling unknown command: {e}")
+        await delete_thinking_message(thinking_msg)
         await message.answer("Извините, я не понял вашу команду. Попробуйте переформулировать.")
 
 
