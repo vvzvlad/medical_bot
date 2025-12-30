@@ -658,7 +658,8 @@ async def handle_done_command(message: Message, user_id: int, user_message: str,
             
             if not matching_meds:
                 # User specified a time that doesn't match any scheduled time
-                scheduled_times = [med.time for med in medications if med.id in medication_ids]
+                # Filter by medication name instead of IDs to ensure we get all scheduled times
+                scheduled_times = [med.time for med in medications if med.name == medication_name]
                 scheduled_times_str = ", ".join(sorted(set(scheduled_times)))
                 
                 logger.info(
