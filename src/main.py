@@ -4,7 +4,7 @@ import asyncio
 import signal
 import sys
 
-from src.bot.bot import get_bot, get_data_manager, get_schedule_manager, init_bot
+from src.bot.bot import get_data_manager, get_schedule_manager, init_bot
 from src.config import settings
 from src.services.scheduler import ReminderScheduler
 from src.utils import logger, setup_logger
