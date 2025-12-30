@@ -1,6 +1,5 @@
 """Telegram bot initialization and setup."""
 
-import asyncio
 from typing import Optional
 
 from aiogram import Bot, Dispatcher
@@ -8,7 +7,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from loguru import logger
 
-from src.bot.handlers import increment_reminders_sent, init_handlers, router
+from src.bot.handlers import init_handlers, router
 from src.config import settings
 from src.data.storage import DataManager
 from src.llm.client import GroqClient
