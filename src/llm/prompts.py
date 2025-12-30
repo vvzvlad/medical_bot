@@ -172,10 +172,17 @@ def get_delete_command_prompt(user_message: str, schedule: list) -> str:
         for med in schedule
     ])
     
+    # Extract valid IDs from schedule
+    valid_ids = [med['id'] for med in schedule]
+    valid_ids_str = ", ".join(map(str, valid_ids))
+    
     return f"""Ты ассистент приема медикаментов. Пользователь хочет удалить медикамент из расписания.
 
 Текущее расписание пользователя:
 {schedule_text}
+
+ВАЖНО: Ты ДОЛЖЕН вернуть только ID из списка выше. НЕ придумывай новые ID.
+Доступные ID в расписании: [{valid_ids_str}]
 
 Сообщение пользователя: {user_message}
 
@@ -183,11 +190,13 @@ def get_delete_command_prompt(user_message: str, schedule: list) -> str:
 - Если под определение попадает один медикамент, верни его ID
 - Если пользователь говорит "я больше не принимаю аспирин" и у него несколько аспиринов, верни все их ID
 - Если непонятно какой именно медикамент удалять (например, несколько аспиринов с разным временем), попроси уточнить
+- Если пользователь просит удалить медикамент, которого нет в списке, верни: {{"status": "not_found", "medication_ids": []}}
 
 Примеры ответов:
 - Успешное удаление одного: {{"status": "success", "medication_ids": [1]}}
 - Успешное удаление всех с одним названием: {{"status": "success", "medication_ids": [1, 3, 5]}}
 - Требуется уточнение: {{"status": "clarification_needed", "message": "Вы принимаете аспирин в 19:00 и аспирин в 21:00, уточните, какой именно вы хотите удалить"}}
+- Медикамент не найден: {{"status": "not_found", "medication_ids": []}}
 
 Ответ должен быть в формате JSON."""
 

@@ -358,10 +358,32 @@ async def handle_delete_command(message: Message, user_id: int, user_message: st
             await message.answer(clarification_msg)
             return
         
+        if status == "not_found":
+            await message.answer("Не удалось найти указанный медикамент в вашем расписании.")
+            return
+        
         medication_ids = result.get("medication_ids", [])
         
         if not medication_ids:
             await message.answer("Не удалось определить, какой медикамент удалить. Попробуйте переформулировать.")
+            return
+        
+        # Validate that returned IDs exist in the schedule
+        valid_ids = {med.id for med in medications}
+        original_ids = medication_ids.copy()
+        medication_ids = [id for id in medication_ids if id in valid_ids]
+        
+        # Log if any IDs were filtered out
+        filtered_ids = [id for id in original_ids if id not in medication_ids]
+        if filtered_ids:
+            logger.warning(
+                f"LLM returned invalid medication IDs for user {user_id}: {filtered_ids}. "
+                f"Valid IDs: {list(valid_ids)}. Filtered them out.",
+                extra={"user_id": user_id, "invalid_ids": filtered_ids, "valid_ids": list(valid_ids)}
+            )
+        
+        if not medication_ids:
+            await message.answer("Не удалось найти указанный медикамент в вашем расписании.")
             return
         
         # Delete medications
