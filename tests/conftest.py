@@ -193,6 +193,23 @@ def mock_groq_client():
 
 
 @pytest.fixture
+def real_groq_client():
+    """Create real GroqClient for integration tests.
+    
+    This fixture creates an actual GroqClient instance that will make
+    real API calls to Groq LLM. Use this for integration tests that
+    verify real-world behavior.
+    
+    Note: Tests using this fixture should be marked with @pytest.mark.llm_real
+    and will be skipped if GROQ_API_KEY is not set.
+    
+    Returns:
+        GroqClient: Real GroqClient instance
+    """
+    return GroqClient()
+
+
+@pytest.fixture
 def mock_bot():
     """Create mock Bot.
     
