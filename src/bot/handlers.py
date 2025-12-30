@@ -463,7 +463,11 @@ async def handle_delete_command(message: Message, user_id: int, user_message: st
         
         if deleted:
             if len(medication_ids) == 1:
-                await message.answer("Медикамент удален из расписания.")
+                # Use medication name if available, otherwise fallback to generic message
+                if medication_name:
+                    await message.answer(f"{medication_name.lower()} удален из расписания.")
+                else:
+                    await message.answer("Медикамент удален из расписания.")
             else:
                 await message.answer(f"Удалено медикаментов: {len(medication_ids)}")
         else:
@@ -511,6 +515,7 @@ async def handle_time_change_command(message: Message, user_id: int, user_messag
         
         medication_id = result.get("medication_id")
         new_times = result.get("new_times", [])
+        medication_name = result.get("medication_name")
         
         if not medication_id or not new_times:
             await message.answer("Не удалось определить медикамент или новое время. Попробуйте переформулировать.")
@@ -524,7 +529,11 @@ async def handle_time_change_command(message: Message, user_id: int, user_messag
         )
         
         times_str = " и ".join(new_times)
-        await message.answer(f"Время приема изменено на {times_str}")
+        # Use medication name if available, otherwise fallback to generic message
+        if medication_name:
+            await message.answer(f"Время приема {medication_name.lower()} изменено на {times_str}")
+        else:
+            await message.answer(f"Время приема изменено на {times_str}")
         
         logger.info(f"Updated medication time for user {user_id}: {medication_id} -> {new_times}")
         
@@ -571,6 +580,7 @@ async def handle_dose_change_command(message: Message, user_id: int, user_messag
         
         medication_id = result.get("medication_id")
         new_dosage = result.get("new_dosage")
+        medication_name = result.get("medication_name")
         
         if not medication_id or not new_dosage:
             await message.answer("Не удалось определить медикамент или новую дозировку. Попробуйте переформулировать.")
@@ -583,7 +593,11 @@ async def handle_dose_change_command(message: Message, user_id: int, user_messag
             new_dosage=new_dosage
         )
         
-        await message.answer(f"Дозировка изменена на {new_dosage}")
+        # Use medication name if available, otherwise fallback to generic message
+        if medication_name:
+            await message.answer(f"Дозировка {medication_name.lower()} изменена на {new_dosage}")
+        else:
+            await message.answer(f"Дозировка изменена на {new_dosage}")
         
         logger.info(f"Updated medication dosage for user {user_id}: {medication_id} -> {new_dosage}")
         
