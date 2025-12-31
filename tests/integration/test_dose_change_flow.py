@@ -47,13 +47,14 @@ async def test_dose_change_confirmation_includes_medication_name(
     schedule = await schedule_manager.get_user_schedule(user_id)
     schedule_dict = [med.to_dict() for med in schedule]
     
-    # Mock LLM to return medication ID, new dosage, and medication name
+    # Mock LLM to return medication ID, new dosage, and medication name in genitive case
+    # The LLM should return medication_name in genitive case as per prompts.py
     async def mock_dose_change_with_name(message, schedule):
         return {
             "status": "success",
             "medication_id": med_id,
             "new_dosage": "400 мг",
-            "medication_name": "Габапентин"
+            "medication_name": "габапентина"  # Genitive case, lowercase
         }
     
     mock_groq_client.process_dose_change_command = AsyncMock(side_effect=mock_dose_change_with_name)
@@ -61,7 +62,7 @@ async def test_dose_change_confirmation_includes_medication_name(
     # Process dose change command
     result = await mock_groq_client.process_dose_change_command(user_message, schedule_dict)
     assert result["status"] == "success"
-    assert result["medication_name"] == "Габапентин"
+    assert result["medication_name"] == "габапентина"  # LLM returns genitive case
     assert result["new_dosage"] == "400 мг"
     
     # Update medication dosage
@@ -127,13 +128,13 @@ async def test_dose_change_confirmation_various_medications(
         schedule = await schedule_manager.get_user_schedule(user_id)
         schedule_dict = [med.to_dict() for med in schedule]
         
-        # Mock LLM to return medication ID, new dosage, and name
-        async def mock_dose_change(message, schedule, name=med_name, id=med_id, dosage=new_dosage):
+        # Mock LLM to return medication ID, new dosage, and name in genitive case
+        async def mock_dose_change(message, schedule, name=expected_lowercase, id=med_id, dosage=new_dosage):
             return {
                 "status": "success",
                 "medication_id": id,
                 "new_dosage": dosage,
-                "medication_name": name
+                "medication_name": name  # Already in genitive case from test_cases
             }
         
         mock_groq_client.process_dose_change_command = AsyncMock(side_effect=mock_dose_change)
@@ -144,8 +145,8 @@ async def test_dose_change_confirmation_various_medications(
             schedule_dict
         )
         
-        # Verify medication name is returned
-        assert result["medication_name"] == med_name
+        # Verify medication name is returned in genitive case
+        assert result["medication_name"] == expected_lowercase
         
         # Update medication dosage
         await schedule_manager.update_medication_dosage(
@@ -317,14 +318,14 @@ async def test_dose_change_various_dosage_formats(
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    # Test cases: (medication_name, old_dosage, new_dosage)
+    # Test cases: (medication_name, genitive_case, old_dosage, new_dosage)
     test_cases = [
-        ("аспирин", "200 мг", "300 мг"),
-        ("парацетамол", "1 таблетка", "2 таблетки"),
-        ("сироп", "5 мл", "10 мл"),
+        ("аспирин", "аспирина", "200 мг", "300 мг"),
+        ("парацетамол", "парацетамола", "1 таблетка", "2 таблетки"),
+        ("сироп", "сиропа", "5 мл", "10 мл"),
     ]
     
-    for med_name, old_dosage, new_dosage in test_cases:
+    for med_name, genitive_name, old_dosage, new_dosage in test_cases:
         # Add medication
         meds = await schedule_manager.add_medication(
             user_id=user_id,
@@ -339,13 +340,13 @@ async def test_dose_change_various_dosage_formats(
         schedule = await schedule_manager.get_user_schedule(user_id)
         schedule_dict = [med.to_dict() for med in schedule]
         
-        # Mock LLM to return medication ID, new dosage, and name
-        async def mock_dose_change(message, schedule, name=med_name, id=med_id, dosage=new_dosage):
+        # Mock LLM to return medication ID, new dosage, and name in genitive case
+        async def mock_dose_change(message, schedule, name=genitive_name, id=med_id, dosage=new_dosage):
             return {
                 "status": "success",
                 "medication_id": id,
                 "new_dosage": dosage,
-                "medication_name": name
+                "medication_name": name  # Genitive case
             }
         
         mock_groq_client.process_dose_change_command = AsyncMock(side_effect=mock_dose_change)
@@ -412,13 +413,13 @@ async def test_dose_change_multiple_time_entries(
     schedule = await schedule_manager.get_user_schedule(user_id)
     schedule_dict = [med.to_dict() for med in schedule]
     
-    # Mock LLM to return medication ID and new dosage
+    # Mock LLM to return medication ID and new dosage with genitive case
     async def mock_dose_change_with_name(message, schedule):
         return {
             "status": "success",
             "medication_id": med_id,
             "new_dosage": "300 мг",
-            "medication_name": "аспирин"
+            "medication_name": "аспирина"  # Genitive case, lowercase
         }
     
     mock_groq_client.process_dose_change_command = AsyncMock(side_effect=mock_dose_change_with_name)

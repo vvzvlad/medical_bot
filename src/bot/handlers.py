@@ -338,7 +338,8 @@ async def handle_add_command(message: Message, user_id: int, user_message: str, 
             # Track added medications for response
             times_str = " и ".join(times)
             dosage_str = f" {dosage}" if dosage else ""
-            added_medications.append(f"{medication_name}{dosage_str} в {times_str}")
+            # Ensure medication name is lowercase for add response
+            added_medications.append(f"{medication_name.lower()}{dosage_str} в {times_str}")
             
             log_operation(
                 "medication_added",
@@ -465,7 +466,8 @@ async def handle_delete_command(message: Message, user_id: int, user_message: st
             if len(medication_ids) == 1:
                 # Use medication name if available, otherwise fallback to generic message
                 if medication_name:
-                    await message.answer(f"{medication_name.lower()} удален из расписания.")
+                    # Capitalize first letter for delete response
+                    await message.answer(f"{medication_name.capitalize()} удален из расписания.")
                 else:
                     await message.answer("Медикамент удален из расписания.")
             else:
@@ -506,6 +508,9 @@ async def handle_time_change_command(message: Message, user_id: int, user_messag
         result = await groq_client.process_time_change_command(user_message, schedule)
         await delete_thinking_message(thinking_msg)
         
+        # Debug logging to see what LLM returns
+        logger.debug(f"Time change LLM result for user {user_id}: {result}")
+        
         status = result.get("status")
         
         if status == "clarification_needed":
@@ -530,7 +535,11 @@ async def handle_time_change_command(message: Message, user_id: int, user_messag
         
         times_str = " и ".join(new_times)
         # Use medication name if available, otherwise fallback to generic message
+        # The LLM should return medication_name in genitive case (родительный падеж)
+        # e.g., "аспирина", "габапентина", "ламотриджина"
         if medication_name:
+            # Just lowercase it - the LLM should already provide genitive case
+            logger.debug(f"Using medication_name from LLM: '{medication_name}' -> '{medication_name.lower()}'")
             await message.answer(f"Время приема {medication_name.lower()} изменено на {times_str}")
         else:
             await message.answer(f"Время приема изменено на {times_str}")
@@ -571,6 +580,9 @@ async def handle_dose_change_command(message: Message, user_id: int, user_messag
         result = await groq_client.process_dose_change_command(user_message, schedule)
         await delete_thinking_message(thinking_msg)
         
+        # Debug logging to see what LLM returns
+        logger.debug(f"Dose change LLM result for user {user_id}: {result}")
+        
         status = result.get("status")
         
         if status == "clarification_needed":
@@ -594,7 +606,11 @@ async def handle_dose_change_command(message: Message, user_id: int, user_messag
         )
         
         # Use medication name if available, otherwise fallback to generic message
+        # The LLM should return medication_name in genitive case (родительный падеж)
+        # e.g., "аспирина", "габапентина", "ламотриджина"
         if medication_name:
+            # Just lowercase it - the LLM should already provide genitive case
+            logger.debug(f"Using medication_name from LLM: '{medication_name}' -> '{medication_name.lower()}'")
             await message.answer(f"Дозировка {medication_name.lower()} изменена на {new_dosage}")
         else:
             await message.answer(f"Дозировка изменена на {new_dosage}")

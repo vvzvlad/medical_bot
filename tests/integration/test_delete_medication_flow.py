@@ -5,7 +5,7 @@ fictional medication IDs during delete operations. It ensures that:
 1. Only valid IDs from the actual schedule are used
 2. Fictional IDs are filtered out and logged
 3. Delete operations work correctly for various scenarios
-4. Confirmation messages include medication names in lowercase
+4. Confirmation messages include medication names with first letter capitalized
 5. Confirmation messages use nominative case (именительный падеж) for medication names
 """
 
@@ -724,13 +724,13 @@ async def test_delete_confirmation_includes_medication_name(
     schedule_manager,
     mock_groq_client
 ):
-    """Test that delete confirmation message includes medication name in lowercase nominative case.
+    """Test that delete confirmation message includes medication name capitalized in nominative case.
     
     Scenario:
     - User has "Габапентин" medication
     - User requests "удали габапентин"
-    - Confirmation message should be "габапентин удален из расписания"
-    - Medication name should be in lowercase nominative case (именительный падеж)
+    - Confirmation message should be "Габапентин удален из расписания"
+    - Medication name should be capitalized (first letter uppercase) in nominative case (именительный падеж)
     """
     # Given: User with medication
     user_id = 123456789
@@ -772,14 +772,14 @@ async def test_delete_confirmation_includes_medication_name(
     assert deleted is True
     
     # Then: Verify the expected confirmation message format
-    # According to handlers.py line 468: f"{medication_name.lower()} удален из расписания."
+    # According to handlers.py line 468: f"{medication_name.capitalize()} удален из расписания."
     medication_name = result.get("medication_name")
-    expected_message = f"{medication_name.lower()} удален из расписания."
+    expected_message = f"{medication_name.capitalize()} удален из расписания."
     
-    # Verify medication name is in lowercase nominative case in the message
-    assert expected_message == "габапентин удален из расписания."
-    assert medication_name.lower() in expected_message
-    # Verify nominative case is used (габапентин, not габапентина)
+    # Verify medication name is capitalized (first letter uppercase) in nominative case in the message
+    assert expected_message == "Габапентин удален из расписания."
+    assert medication_name.capitalize() in expected_message
+    # Verify nominative case is used (Габапентин, not Габапентина)
     
     # Verify medication was actually deleted
     user_data = await data_manager.get_user_data(user_id)
@@ -797,20 +797,20 @@ async def test_delete_confirmation_various_medications(
     
     Scenario:
     - Test multiple medications with different names
-    - Verify each confirmation message includes the correct medication name in lowercase nominative case
-    - Examples: "аспирин удален", "ламотриджин удален", "парацетамол удален"
+    - Verify each confirmation message includes the correct medication name capitalized in nominative case
+    - Examples: "Аспирин удален", "Ламотриджин удален", "Парацетамол удален"
     """
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    # Test cases: (medication_name, expected_lowercase_nominative)
+    # Test cases: (medication_name, expected_capitalized_nominative)
     test_cases = [
-        ("Ламотриджин", "ламотриджин"),  # nominative case
-        ("АСПИРИН", "аспирин"),  # nominative case
-        ("ПараЦетаМол", "парацетамол"),  # nominative case
+        ("Ламотриджин", "Ламотриджин"),  # nominative case, capitalized
+        ("АСПИРИН", "Аспирин"),  # nominative case, capitalized
+        ("ПараЦетаМол", "Парацетамол"),  # nominative case, capitalized
     ]
     
-    for med_name, expected_lowercase in test_cases:
+    for med_name, expected_capitalized in test_cases:
         # Add medication
         meds = await schedule_manager.add_medication(
             user_id=user_id,
@@ -845,10 +845,10 @@ async def test_delete_confirmation_various_medications(
         deleted = await schedule_manager.delete_medications(user_id, result["medication_ids"])
         assert deleted is True
         
-        # Verify expected confirmation message format with nominative case
-        expected_message = f"{expected_lowercase} удален из расписания."
-        assert result["medication_name"].lower() == expected_lowercase
-        # Verify nominative case is used (e.g., "аспирин", not "аспирина")
+        # Verify expected confirmation message format with capitalized nominative case
+        expected_message = f"{expected_capitalized} удален из расписания."
+        assert result["medication_name"].capitalize() == expected_capitalized or result["medication_name"] == expected_capitalized
+        # Verify nominative case is used (e.g., "Аспирин", not "Аспирина")
         
         # Verify medication was deleted
         user_data = await data_manager.get_user_data(user_id)

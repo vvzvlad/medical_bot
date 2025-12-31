@@ -47,13 +47,14 @@ async def test_time_change_confirmation_includes_medication_name(
     schedule = await schedule_manager.get_user_schedule(user_id)
     schedule_dict = [med.to_dict() for med in schedule]
     
-    # Mock LLM to return medication ID, new time, and medication name
+    # Mock LLM to return medication ID, new time, and medication name in genitive case
+    # The LLM should return medication_name in genitive case as per prompts.py
     async def mock_time_change_with_name(message, schedule):
         return {
             "status": "success",
             "medication_id": med_id,
             "new_times": ["11:00"],
-            "medication_name": "Ламотриджин"
+            "medication_name": "ламотриджина"  # Genitive case, lowercase
         }
     
     mock_groq_client.process_time_change_command = AsyncMock(side_effect=mock_time_change_with_name)
@@ -61,7 +62,7 @@ async def test_time_change_confirmation_includes_medication_name(
     # Process time change command
     result = await mock_groq_client.process_time_change_command(user_message, schedule_dict)
     assert result["status"] == "success"
-    assert result["medication_name"] == "Ламотриджин"
+    assert result["medication_name"] == "ламотриджина"  # LLM returns genitive case
     assert result["new_times"] == ["11:00"]
     
     # Update medication time
@@ -123,13 +124,13 @@ async def test_time_change_confirmation_multiple_times(
     schedule = await schedule_manager.get_user_schedule(user_id)
     schedule_dict = [med.to_dict() for med in schedule]
     
-    # Mock LLM to return multiple new times
+    # Mock LLM to return multiple new times with genitive case
     async def mock_time_change_multiple(message, schedule):
         return {
             "status": "success",
             "medication_id": med_id,
             "new_times": ["10:00", "18:00"],
-            "medication_name": "аспирин"
+            "medication_name": "аспирина"  # Genitive case, lowercase
         }
     
     mock_groq_client.process_time_change_command = AsyncMock(side_effect=mock_time_change_multiple)
@@ -201,13 +202,13 @@ async def test_time_change_confirmation_various_medications(
         schedule = await schedule_manager.get_user_schedule(user_id)
         schedule_dict = [med.to_dict() for med in schedule]
         
-        # Mock LLM to return medication ID, new time, and name
-        async def mock_time_change(message, schedule, name=med_name, id=med_id, time=new_time):
+        # Mock LLM to return medication ID, new time, and name in genitive case
+        async def mock_time_change(message, schedule, name=expected_lowercase, id=med_id, time=new_time):
             return {
                 "status": "success",
                 "medication_id": id,
                 "new_times": [time],
-                "medication_name": name
+                "medication_name": name  # Already in genitive case from test_cases
             }
         
         mock_groq_client.process_time_change_command = AsyncMock(side_effect=mock_time_change)
@@ -218,8 +219,8 @@ async def test_time_change_confirmation_various_medications(
             schedule_dict
         )
         
-        # Verify medication name is returned
-        assert result["medication_name"] == med_name
+        # Verify medication name is returned in genitive case
+        assert result["medication_name"] == expected_lowercase
         
         # Update medication time
         updated_meds = await schedule_manager.update_medication_time(
