@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from aiogram import F, Router
+from aiogram.enums import ChatAction
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
@@ -45,7 +46,7 @@ def init_handlers(dm: DataManager, sm: ScheduleManager, gc: GroqClient):
 
 
 async def send_thinking_message(message: Message) -> Optional[Message]:
-    """Send a temporary 'thinking...' message to the user.
+    """Send a temporary 'thinking...' message to the user with typing indicator.
     
     Args:
         message: Original message from user
@@ -54,6 +55,9 @@ async def send_thinking_message(message: Message) -> Optional[Message]:
         Sent thinking message or None if failed
     """
     try:
+        # Send typing indicator to show bot is processing
+        await message.bot.send_chat_action(message.chat.id, ChatAction.TYPING)
+        # Send thinking message
         thinking_msg = await message.answer("🤔 Думаю...")
         return thinking_msg
     except Exception as e:
