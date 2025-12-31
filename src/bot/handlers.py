@@ -45,7 +45,7 @@ def init_handlers(dm: DataManager, sm: ScheduleManager, gc: GroqClient):
 
 
 async def send_thinking_message(message: Message) -> Optional[Message]:
-    """Send typing action and a temporary 'thinking...' message to the user.
+    """Send a temporary 'thinking...' message to the user.
     
     Args:
         message: Original message from user
@@ -54,8 +54,6 @@ async def send_thinking_message(message: Message) -> Optional[Message]:
         Sent thinking message or None if failed
     """
     try:
-        # Send typing action first
-        await message.chat.send_action(action="typing")
         thinking_msg = await message.answer("🤔 Думаю...")
         return thinking_msg
     except Exception as e:
@@ -202,9 +200,6 @@ async def handle_text_message(message: Message):
             # Create new user with default timezone
             await data_manager.create_user(user_id, settings.default_timezone_offset)
             
-            # Send typing action before generating onboarding message
-            await message.chat.send_action(action="typing")
-            
             # Generate and send onboarding message
             onboarding_msg = await generate_onboarding_message()
             await message.answer(onboarding_msg)
@@ -257,9 +252,6 @@ async def handle_text_message(message: Message):
         elif command_type == "done":
             await handle_done_command(message, user_id, user_message, thinking_msg)
             
-        elif command_type == "help":
-            await handle_help_command(message, thinking_msg)
-            
         else:  # unknown
             await handle_unknown_command(message, user_message, thinking_msg)
             
@@ -287,31 +279,6 @@ async def handle_list_command(message: Message, user_id: int):
     except Exception as e:
         logger.error(f"Error showing schedule for user {user_id}: {e}")
         await message.answer("Произошла ошибка при получении расписания.")
-
-
-async def handle_help_command(message: Message, thinking_msg: Optional[Message] = None):
-    """Handle help command - show bot capabilities and usage instructions.
-    
-    Args:
-        message: Incoming message
-        thinking_msg: Optional thinking message to delete
-    """
-    try:
-        result = await groq_client.process_help_command()
-        await delete_thinking_message(thinking_msg)
-        
-        help_message = result.get("message", "Извините, не удалось загрузить справку. Попробуйте позже.")
-        await message.answer(help_message)
-        logger.info(f"Sent help message to user {message.from_user.id}")
-        
-    except GroqAPIError as e:
-        logger.error(f"LLM API error in help command for user {message.from_user.id}: {e}", exc_info=True)
-        await delete_thinking_message(thinking_msg)
-        await message.answer(format_error_for_user(e))
-    except Exception as e:
-        logger.error(f"Error handling help command for user {message.from_user.id}: {e}", exc_info=True)
-        await delete_thinking_message(thinking_msg)
-        await message.answer("Произошла ошибка при получении справки.")
 
 
 async def handle_add_command(message: Message, user_id: int, user_message: str, thinking_msg: Optional[Message] = None):
