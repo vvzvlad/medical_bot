@@ -754,12 +754,6 @@ async def handle_done_command(message: Message, user_id: int, user_message: str,
         specified_time = result.get("time")
         medication_ids = result.get("medication_ids", [])
         
-        # Validate that we have valid medication IDs
-        if not medication_ids:
-            logger.warning(f"No medication_ids returned by LLM for user {user_id}. User message: {user_message}")
-            await message.answer("Не удалось определить, какой медикамент вы приняли. Попробуйте переформулировать.")
-            return
-        
         # Filter medication IDs to only include those that exist in the current schedule
         valid_medication_ids = [med.id for med in medications]
         filtered_ids = [med_id for med_id in medication_ids if med_id in valid_medication_ids]
@@ -784,6 +778,12 @@ async def handle_done_command(message: Message, user_id: int, user_message: str,
         
         # Use filtered IDs
         medication_ids = filtered_ids
+        
+        # Validate that we have valid medication IDs after filtering/fallback
+        if not medication_ids:
+            logger.warning(f"No valid medication IDs found for user {user_id}. User message: {user_message}")
+            await message.answer("Не удалось определить, какой медикамент вы приняли. Попробуйте переформулировать.")
+            return
         
         # If user specified a time, validate it matches a scheduled time
         if specified_time:
