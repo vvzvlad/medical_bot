@@ -235,8 +235,7 @@ async def handle_text_message(message: Message):
         
         # Stage 2: Process command based on type
         if command_type == "list":
-            await delete_thinking_message(thinking_msg)
-            await handle_list_command(message, user_id)
+            await handle_list_command(message, user_id, thinking_msg)
             
         elif command_type == "add":
             await handle_add_command(message, user_id, user_message, thinking_msg)
@@ -261,7 +260,6 @@ async def handle_text_message(message: Message):
                 f"Help command detected for user {user_id}, routing to handle_help_command",
                 extra={"user_id": user_id, "user_message": user_message}
             )
-            await delete_thinking_message(thinking_msg)
             await handle_help_command(message, user_id, thinking_msg)
             
         else:  # unknown
@@ -280,20 +278,23 @@ async def handle_text_message(message: Message):
         await message.answer(format_error_for_user(e))
 
 
-async def handle_list_command(message: Message, user_id: int):
+async def handle_list_command(message: Message, user_id: int, thinking_msg: Optional[Message] = None):
     """Handle list command - show user's medication schedule.
     
     Args:
         message: Incoming message
         user_id: User ID
+        thinking_msg: Optional thinking message to delete
     """
     try:
         medications = await schedule_manager.get_user_schedule(user_id)
         schedule_text = schedule_manager.format_schedule_for_display(medications)
+        await delete_thinking_message(thinking_msg)
         await message.answer(schedule_text)
         logger.info(f"Sent schedule to user {user_id}")
     except Exception as e:
         logger.error(f"Error showing schedule for user {user_id}: {e}")
+        await delete_thinking_message(thinking_msg)
         await message.answer("Произошла ошибка при получении расписания.")
 
 

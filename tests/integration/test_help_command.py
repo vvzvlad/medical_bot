@@ -135,7 +135,7 @@ async def test_help_command_handler_integration(
     init_handlers(data_manager, schedule_manager, mock_groq_client)
     
     # When: Processing help command through handler
-    await handle_help_command(mock_message, thinking_msg=None)
+    await handle_help_command(mock_message, user_id, thinking_msg=None)
     
     # Then: Should call process_help_command and send response
     mock_groq_client.process_help_command.assert_called_once()
@@ -175,13 +175,14 @@ async def test_help_command_handler_error_handling(
     init_handlers(data_manager, schedule_manager, mock_groq_client)
     
     # When: Processing help command that fails
-    await handle_help_command(mock_message, thinking_msg=None)
+    await handle_help_command(mock_message, user_id, thinking_msg=None)
     
     # Then: Should handle error gracefully
     mock_message.answer.assert_called_once()
     call_args = mock_message.answer.call_args
-    # Should send error message instead of crashing
-    assert "ошибка" in call_args[0][0].lower() or "попробуйте" in call_args[0][0].lower()
+    # Should send fallback help message instead of crashing
+    expected_fallback = "Я бот для управления приемом медикаментов.\n\nДоступные команды:\n- Добавь [название] в [время]\n- Что я принимаю - показать расписание\n- Удали [название]\n- Измени время [название] на [вреремя]"
+    assert call_args[0][0] == expected_fallback
 
 
 # TC-INT-HELP-006: Help Command Handler with Thinking Message
@@ -217,7 +218,7 @@ async def test_help_command_handler_with_thinking_message(
     init_handlers(data_manager, schedule_manager, mock_groq_client)
     
     # When: Processing help command with thinking message
-    await handle_help_command(mock_message, thinking_msg=thinking_message)
+    await handle_help_command(mock_message, user_id, thinking_msg=thinking_message)
     
     # Then: Should clean up thinking message and send response
     thinking_message.delete.assert_called_once()
