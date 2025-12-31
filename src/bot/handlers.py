@@ -841,7 +841,18 @@ async def handle_done_command(message: Message, user_id: int, user_message: str,
             logger.info(f"Marking medication {med_id} as taken for user {user_id}")
             await schedule_manager.mark_medication_taken(user_id, med_id)
         
-        await message.answer("Отмечено как принято ✓")
+        # Get medication name from the medication object for the confirmation message
+        medication_name_display = None
+        if medication_ids:
+            first_med = next((med for med in medications if med.id == medication_ids[0]), None)
+            if first_med:
+                medication_name_display = first_med.name
+        
+        # Send confirmation message with medication name
+        if medication_name_display:
+            await message.answer(f"Отмечено как принято: {medication_name_display} ✓")
+        else:
+            await message.answer("Отмечено как принято ✓")
         
         logger.info(f"Successfully marked medication as taken for user {user_id}: {medication_ids}")
         
