@@ -217,6 +217,7 @@ async def handle_text_message(message: Message):
             command_type = await groq_client.detect_command_type(user_message)
             log_operation("command_detected", user_id=user_id, command_type=command_type)
             logger.info(f"Detected command type: {command_type} for user {user_id}")
+            logger.debug(f"User message: '{user_message}' -> Command type: {command_type}")
         except GroqInsufficientFundsError as e:
             logger.error(f"LLM API insufficient funds for user {user_id}", exc_info=True)
             await delete_thinking_message(thinking_msg)

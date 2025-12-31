@@ -200,10 +200,13 @@ class GroqClient:
         logger.info(f"Detecting command type for message: {user_message}")
         
         prompt = prompts.get_command_detection_prompt(user_message)
+        logger.debug(f"Command detection prompt: {prompt[:200]}...")
+        
         result = await self._make_request(prompt)
         
         command_type = result.get("command_type", "unknown")
-        logger.info(f"Detected command type: {command_type}")
+        logger.info(f"Detected command type: {command_type} for message: '{user_message}'")
+        logger.debug(f"Full LLM result: {result}")
         
         return command_type
     
