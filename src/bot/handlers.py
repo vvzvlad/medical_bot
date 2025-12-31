@@ -434,10 +434,34 @@ async def handle_delete_command(message: Message, user_id: int, user_message: st
         result = await groq_client.process_delete_command(user_message, schedule)
         await delete_thinking_message(thinking_msg)
         
-        status = result.get("status")
+        # Handle both single dict response and list response from LLM
+        if isinstance(result, list):
+            # LLM returned multiple medications to delete
+            # For now, we'll process the first one to maintain compatibility
+            # In the future, we could handle all of them
+            if result:
+                processed_result = result[0]
+                logger.info(
+                    f"LLM returned list of {len(result)} medications to delete for user {user_id}. "
+                    f"Processing first one: {processed_result}"
+                )
+            else:
+                await message.answer("Не удалось определить, какой медикамент удалить. Попробуйте переформулировать.")
+                return
+        elif isinstance(result, dict):
+            processed_result = result
+        else:
+            logger.warning(
+                f"Unexpected result type from process_delete_command for user {user_id}",
+                extra={"result_type": type(result).__name__, "result": result}
+            )
+            await message.answer("Не удалось определить, какой медикамент удалить. Попробуйте переформулировать.")
+            return
+        
+        status = processed_result.get("status")
         
         if status == "clarification_needed":
-            clarification_msg = result.get("message", "Уточните, какой именно медикамент вы хотите удалить.")
+            clarification_msg = processed_result.get("message", "Уточните, какой именно медикамент вы хотите удалить.")
             await message.answer(clarification_msg)
             return
         
@@ -445,8 +469,8 @@ async def handle_delete_command(message: Message, user_id: int, user_message: st
             await message.answer("Не удалось найти указанный медикамент в вашем расписании.")
             return
         
-        medication_ids = result.get("medication_ids", [])
-        medication_name = result.get("medication_name")
+        medication_ids = processed_result.get("medication_ids", [])
+        medication_name = processed_result.get("medication_name")
         
         if not medication_ids:
             await message.answer("Не удалось определить, какой медикамент удалить. Попробуйте переформулировать.")
