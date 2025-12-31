@@ -358,6 +358,24 @@ class GroqClient:
         logger.info(f"Done command result: {result}")
         return result
     
+    async def process_help_command(self) -> Dict[str, Any]:
+        """Generate help message for user (second stage).
+        
+        Returns:
+            Dict with help message
+            Example: {"message": "Привет! Я помогу вам управлять расписанием..."}
+            
+        Raises:
+            GroqAPIError: If API request fails
+        """
+        logger.info("Processing help command")
+        
+        prompt = prompts.get_help_command_prompt()
+        result = await self._make_request(prompt)
+        
+        logger.info(f"Help command result: {result}")
+        return result
+    
     async def process_unknown_command(self, user_message: str) -> Dict[str, Any]:
         """Generate error message for unknown command (second stage).
         

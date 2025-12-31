@@ -257,6 +257,9 @@ async def handle_text_message(message: Message):
         elif command_type == "done":
             await handle_done_command(message, user_id, user_message, thinking_msg)
             
+        elif command_type == "help":
+            await handle_help_command(message, thinking_msg)
+            
         else:  # unknown
             await handle_unknown_command(message, user_message, thinking_msg)
             
@@ -284,6 +287,31 @@ async def handle_list_command(message: Message, user_id: int):
     except Exception as e:
         logger.error(f"Error showing schedule for user {user_id}: {e}")
         await message.answer("Произошла ошибка при получении расписания.")
+
+
+async def handle_help_command(message: Message, thinking_msg: Optional[Message] = None):
+    """Handle help command - show bot capabilities and usage instructions.
+    
+    Args:
+        message: Incoming message
+        thinking_msg: Optional thinking message to delete
+    """
+    try:
+        result = await groq_client.process_help_command()
+        await delete_thinking_message(thinking_msg)
+        
+        help_message = result.get("message", "Извините, не удалось загрузить справку. Попробуйте позже.")
+        await message.answer(help_message)
+        logger.info(f"Sent help message to user {message.from_user.id}")
+        
+    except GroqAPIError as e:
+        logger.error(f"LLM API error in help command for user {message.from_user.id}: {e}", exc_info=True)
+        await delete_thinking_message(thinking_msg)
+        await message.answer(format_error_for_user(e))
+    except Exception as e:
+        logger.error(f"Error handling help command for user {message.from_user.id}: {e}", exc_info=True)
+        await delete_thinking_message(thinking_msg)
+        await message.answer("Произошла ошибка при получении справки.")
 
 
 async def handle_add_command(message: Message, user_id: int, user_message: str, thinking_msg: Optional[Message] = None):
