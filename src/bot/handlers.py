@@ -315,6 +315,8 @@ async def handle_add_command(message: Message, user_id: int, user_message: str, 
         
         # Validate and add each medication
         added_medications = []
+        skipped_duplicates = []
+        
         for med_data in medications_to_add:
             medication_name = med_data.get("medication_name")
             times = med_data.get("times", [])
@@ -327,8 +329,8 @@ async def handle_add_command(message: Message, user_id: int, user_message: str, 
                 )
                 continue
             
-            # Add medication
-            created_meds = await schedule_manager.add_medication(
+            # Add medication (returns created medications and skipped times)
+            created_meds, skipped_times = await schedule_manager.add_medication(
                 user_id=user_id,
                 name=medication_name,
                 times=times,
@@ -336,27 +338,45 @@ async def handle_add_command(message: Message, user_id: int, user_message: str, 
             )
             
             # Track added medications for response
-            times_str = " и ".join(times)
-            dosage_str = f" {dosage}" if dosage else ""
-            # Ensure medication name is lowercase for add response
-            added_medications.append(f"{medication_name.lower()}{dosage_str} в {times_str}")
+            if created_meds:
+                added_times = [med.time for med in created_meds]
+                times_str = " и ".join(added_times)
+                dosage_str = f" {dosage}" if dosage else ""
+                # Ensure medication name is lowercase for add response
+                added_medications.append(f"{medication_name.lower()}{dosage_str} в {times_str}")
+                
+                log_operation(
+                    "medication_added",
+                    user_id=user_id,
+                    medication_name=medication_name,
+                    times=added_times,
+                    dosage=dosage
+                )
+                logger.info(f"Added medication for user {user_id}: {medication_name} at {times_str}")
             
-            log_operation(
-                "medication_added",
-                user_id=user_id,
-                medication_name=medication_name,
-                times=times,
-                dosage=dosage
-            )
-            logger.info(f"Added medication for user {user_id}: {medication_name} at {times_str}")
+            # Track skipped duplicates for response
+            if skipped_times:
+                skipped_times_str = " и ".join(skipped_times)
+                dosage_str = f" {dosage}" if dosage else ""
+                skipped_duplicates.append(f"{medication_name.lower()}{dosage_str} в {skipped_times_str}")
         
         # Send response
+        response_parts = []
+        
         if added_medications:
             if len(added_medications) == 1:
-                response = f"Добавлено: {added_medications[0]}"
+                response_parts.append(f"Добавлено: {added_medications[0]}")
             else:
-                response = "Добавлено:\n" + "\n".join(f"• {med}" for med in added_medications)
-            await message.answer(response)
+                response_parts.append("Добавлено:\n" + "\n".join(f"• {med}" for med in added_medications))
+        
+        if skipped_duplicates:
+            if len(skipped_duplicates) == 1:
+                response_parts.append(f"Уже есть в расписании: {skipped_duplicates[0]}")
+            else:
+                response_parts.append("Уже есть в расписании:\n" + "\n".join(f"• {med}" for med in skipped_duplicates))
+        
+        if response_parts:
+            await message.answer("\n\n".join(response_parts))
         else:
             await message.answer("Не удалось распознать название медикамента или время приема. Попробуйте переформулировать.")
         

@@ -168,7 +168,7 @@ async def test_delete_medication_updates_file(data_manager, schedule_manager, te
     # Given: User with medication
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
-    meds = await schedule_manager.add_medication(user_id, "аспирин", ["10:00"], "200 мг")
+    meds, skipped = await schedule_manager.add_medication(user_id, "аспирин", ["10:00"], "200 мг")
     medication_id = meds[0].id
     
     # When: Deleting medication
@@ -191,7 +191,7 @@ async def test_update_time_updates_file(data_manager, schedule_manager, temp_dat
     # Given: User with medication
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
-    meds = await schedule_manager.add_medication(user_id, "аспирин", ["10:00"], "200 мг")
+    meds, skipped = await schedule_manager.add_medication(user_id, "аспирин", ["10:00"], "200 мг")
     medication_id = meds[0].id
     
     # When: Updating time
@@ -214,7 +214,7 @@ async def test_mark_taken_updates_file(data_manager, schedule_manager, temp_data
     # Given: User with medication
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
-    meds = await schedule_manager.add_medication(user_id, "аспирин", ["10:00"], "200 мг")
+    meds, skipped = await schedule_manager.add_medication(user_id, "аспирин", ["10:00"], "200 мг")
     medication_id = meds[0].id
     
     # When: Marking as taken

@@ -35,11 +35,12 @@ class ScheduleManager:
         name: str,
         times: list[str],
         dosage: Optional[str] = None,
-    ) -> list[Medication]:
-        """Add medication(s) to user's schedule.
+    ) -> tuple[list[Medication], list[str]]:
+        """Add medication(s) to user's schedule with duplicate detection.
         
         If multiple times are provided, creates separate medication entries
         for each time (same medication taken multiple times per day).
+        Skips times that would create duplicates (same name and time).
         
         Args:
             user_id: Telegram user ID
@@ -48,17 +49,20 @@ class ScheduleManager:
             dosage: Optional dosage information
             
         Returns:
-            List of created Medication instances
+            Tuple of (created_medications, skipped_times):
+                - created_medications: List of created Medication instances
+                - skipped_times: List of times that were skipped as duplicates
             
         Raises:
             ValueError: If user doesn't exist or times list is empty
             
         Examples:
             >>> # Add medication with single time
-            >>> await manager.add_medication(123, "Аспирин", ["10:00"], "200 мг")
+            >>> created, skipped = await manager.add_medication(123, "Аспирин", ["10:00"], "200 мг")
             
-            >>> # Add medication with multiple times
-            >>> await manager.add_medication(123, "Парацетамол", ["10:00", "18:00"])
+            >>> # Add medication with multiple times (one duplicate)
+            >>> created, skipped = await manager.add_medication(123, "Парацетамол", ["10:00", "18:00"])
+            >>> # If 10:00 already exists, created will have only 18:00, skipped will be ["10:00"]
         """
         if not times:
             raise ValueError("Times list cannot be empty")
@@ -69,9 +73,30 @@ class ScheduleManager:
             logger.error(f"User {user_id} not found when adding medication")
             raise ValueError(f"User {user_id} not found")
         
-        # Create medication entries for each time
-        created_medications = []
+        # Check for duplicates - case-insensitive name matching, exact time matching
+        name_lower = name.lower()
+        existing_medications = {
+            (med.name.lower(), med.time)
+            for med in user_data.medications
+        }
+        
+        # Filter out duplicate times
+        times_to_add = []
+        skipped_times = []
+        
         for time in times:
+            if (name_lower, time) in existing_medications:
+                skipped_times.append(time)
+                logger.warning(
+                    f"Skipping duplicate medication for user {user_id}: "
+                    f"{name} at {time} already exists"
+                )
+            else:
+                times_to_add.append(time)
+        
+        # Create medication entries for non-duplicate times
+        created_medications = []
+        for time in times_to_add:
             medication = user_data.add_medication(
                 name=name,
                 time=time,
@@ -83,10 +108,19 @@ class ScheduleManager:
                 f"(dosage: {dosage or 'not specified'})"
             )
         
-        # Save updated data
-        await self.data_manager.save_user_data(user_data)
+        # Save updated data only if medications were added
+        if created_medications:
+            await self.data_manager.save_user_data(user_data)
         
-        return created_medications
+        # Log summary if there were duplicates
+        if skipped_times:
+            logger.info(
+                f"Duplicate detection summary for user {user_id}: "
+                f"added {len(created_medications)} time(s), "
+                f"skipped {len(skipped_times)} duplicate(s) for {name}"
+            )
+        
+        return created_medications, skipped_times
     
     async def delete_medications(
         self,
