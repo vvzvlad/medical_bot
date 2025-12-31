@@ -45,7 +45,7 @@ def init_handlers(dm: DataManager, sm: ScheduleManager, gc: GroqClient):
 
 
 async def send_thinking_message(message: Message) -> Optional[Message]:
-    """Send a temporary 'thinking...' message to the user.
+    """Send typing action and a temporary 'thinking...' message to the user.
     
     Args:
         message: Original message from user
@@ -54,6 +54,8 @@ async def send_thinking_message(message: Message) -> Optional[Message]:
         Sent thinking message or None if failed
     """
     try:
+        # Send typing action first
+        await message.chat.send_action(action="typing")
         thinking_msg = await message.answer("🤔 Думаю...")
         return thinking_msg
     except Exception as e:
@@ -199,6 +201,9 @@ async def handle_text_message(message: Message):
             
             # Create new user with default timezone
             await data_manager.create_user(user_id, settings.default_timezone_offset)
+            
+            # Send typing action before generating onboarding message
+            await message.chat.send_action(action="typing")
             
             # Generate and send onboarding message
             onboarding_msg = await generate_onboarding_message()
