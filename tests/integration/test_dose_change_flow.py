@@ -31,14 +31,14 @@ async def test_dose_change_confirmation_includes_medication_name(
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    meds = await schedule_manager.add_medication(
+    created_meds, skipped = await schedule_manager.add_medication(
         user_id=user_id,
         name="Габапентин",
         times=["10:00"],
         dosage="300 мг"
     )
     
-    med_id = meds[0].id
+    med_id = created_meds[0].id
     
     # When: User requests to change dosage
     user_message = "габапентин теперь 400 мг"
@@ -115,14 +115,14 @@ async def test_dose_change_confirmation_various_medications(
     
     for med_name, expected_lowercase, old_dosage, new_dosage in test_cases:
         # Add medication
-        meds = await schedule_manager.add_medication(
+        created_meds, skipped = await schedule_manager.add_medication(
             user_id=user_id,
             name=med_name,
             times=["10:00"],
             dosage=old_dosage
         )
         
-        med_id = meds[0].id
+        med_id = created_meds[0].id
         
         # Get current schedule
         schedule = await schedule_manager.get_user_schedule(user_id)
@@ -187,14 +187,14 @@ async def test_dose_change_confirmation_without_medication_name(
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    meds = await schedule_manager.add_medication(
+    created_meds, skipped = await schedule_manager.add_medication(
         user_id=user_id,
         name="аспирин",
         times=["10:00"],
         dosage="200 мг"
     )
     
-    med_id = meds[0].id
+    med_id = created_meds[0].id
     
     # When: LLM returns result without medication_name
     user_message = "измени дозировку на 300 мг"
@@ -327,14 +327,14 @@ async def test_dose_change_various_dosage_formats(
     
     for med_name, genitive_name, old_dosage, new_dosage in test_cases:
         # Add medication
-        meds = await schedule_manager.add_medication(
+        created_meds, skipped = await schedule_manager.add_medication(
             user_id=user_id,
             name=med_name,
             times=["10:00"],
             dosage=old_dosage
         )
         
-        med_id = meds[0].id
+        med_id = created_meds[0].id
         
         # Get current schedule
         schedule = await schedule_manager.get_user_schedule(user_id)
@@ -396,7 +396,7 @@ async def test_dose_change_multiple_time_entries(
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    meds = await schedule_manager.add_medication(
+    created_meds, skipped = await schedule_manager.add_medication(
         user_id=user_id,
         name="аспирин",
         times=["10:00", "18:00"],
@@ -404,7 +404,7 @@ async def test_dose_change_multiple_time_entries(
     )
     
     # Get one of the medication IDs (they share the same name)
-    med_id = meds[0].id
+    med_id = created_meds[0].id
     
     # When: User requests to change dosage
     user_message = "аспирин теперь 300 мг"

@@ -126,8 +126,8 @@ async def test_callback_button_click(
     # Given: User with medication and reminder sent
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
-    meds = await schedule_manager.add_medication(user_id, "аспирин", ["10:00"], "200 мг")
-    medication_id = meds[0].id
+    created_meds, skipped = await schedule_manager.add_medication(user_id, "аспирин", ["10:00"], "200 мг")
+    medication_id = created_meds[0].id
     
     # Set reminder message ID
     user_data = await data_manager.get_user_data(user_id)
@@ -189,10 +189,10 @@ async def test_no_reminder_if_already_taken(
     # Given: User with medication already taken today
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
-    meds = await schedule_manager.add_medication(user_id, "аспирин", ["10:00"], "200 мг")
+    created_meds, skipped = await schedule_manager.add_medication(user_id, "аспирин", ["10:00"], "200 мг")
     
     # Mark as taken
-    await schedule_manager.mark_medication_taken(user_id, meds[0].id)
+    await schedule_manager.mark_medication_taken(user_id, created_meds[0].id)
     
     # When: Scheduler runs at 10:00
     await scheduler.check_and_send_reminders()

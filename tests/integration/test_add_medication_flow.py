@@ -143,13 +143,13 @@ async def test_delete_medication_flow(
     # Given: User with medication
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
-    meds = await schedule_manager.add_medication(
+    created_meds, skipped = await schedule_manager.add_medication(
         user_id=user_id,
         name="аспирин",
         times=["10:00"],
         dosage="200 мг"
     )
-    medication_id = meds[0].id
+    medication_id = created_meds[0].id
     
     # When: Processing delete command
     user_message = "Удали аспирин"
@@ -187,13 +187,13 @@ async def test_time_change_flow(
     # Given: User with medication
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
-    meds = await schedule_manager.add_medication(
+    created_meds, skipped = await schedule_manager.add_medication(
         user_id=user_id,
         name="аспирин",
         times=["10:00"],
         dosage="200 мг"
     )
-    medication_id = meds[0].id
+    medication_id = created_meds[0].id
     
     # When: Processing time change command
     user_message = "Аспирин теперь в 11:00"
@@ -235,13 +235,13 @@ async def test_dose_change_flow(
     # Given: User with medication
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
-    meds = await schedule_manager.add_medication(
+    created_meds, skipped = await schedule_manager.add_medication(
         user_id=user_id,
         name="аспирин",
         times=["10:00"],
         dosage="200 мг"
     )
-    medication_id = meds[0].id
+    medication_id = created_meds[0].id
     
     # When: Processing dose change command
     user_message = "Аспирин теперь 300 мг"

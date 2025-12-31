@@ -30,7 +30,7 @@ async def test_record_intake_at_scheduled_time(
     await data_manager.create_user(user_id, "+03:00")
     
     # Add medication with multiple times
-    meds = await schedule_manager.add_medication(
+    created_meds, skipped = await schedule_manager.add_medication(
         user_id=user_id,
         name="Героин",
         times=["11:00", "13:00", "15:00", "17:00"],
@@ -38,7 +38,7 @@ async def test_record_intake_at_scheduled_time(
     )
     
     # Find the 13:00 medication ID
-    med_13 = next(med for med in meds if med.time == "13:00")
+    med_13 = next(med for med in created_meds if med.time == "13:00")
     
     # When: User reports taking medication at scheduled time
     user_message = "Принял Героин в 13:00"
@@ -274,14 +274,14 @@ async def test_record_intake_with_partial_time_match(
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    meds = await schedule_manager.add_medication(
+    created_meds, skipped = await schedule_manager.add_medication(
         user_id=user_id,
         name="Парацетамол",
         times=["09:00", "15:00"],
         dosage="400 мг"
     )
     
-    med_09 = next(med for med in meds if med.time == "09:00")
+    med_09 = next(med for med in created_meds if med.time == "09:00")
     
     # When: User specifies time without leading zero
     user_message = "Принял Парацетамол в 9:00"
@@ -387,14 +387,14 @@ async def test_record_intake_single_scheduled_time(
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    meds = await schedule_manager.add_medication(
+    created_meds, skipped = await schedule_manager.add_medication(
         user_id=user_id,
         name="Витамин D",
         times=["09:00"],
         dosage="2 капсулы"
     )
     
-    med_id = meds[0].id
+    med_id = created_meds[0].id
     
     # When: User reports taking medication without time
     user_message = "Принял Витамин D"
@@ -447,22 +447,22 @@ async def test_record_intake_exact_time_multiple_medications(
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    meds_aspirin = await schedule_manager.add_medication(
+    created_meds_aspirin, skipped_aspirin = await schedule_manager.add_medication(
         user_id=user_id,
         name="Аспирин",
         times=["10:00"],
         dosage="200 мг"
     )
     
-    meds_paracetamol = await schedule_manager.add_medication(
+    created_meds_paracetamol, skipped_paracetamol = await schedule_manager.add_medication(
         user_id=user_id,
         name="Парацетамол",
         times=["10:00"],
         dosage="400 мг"
     )
     
-    aspirin_id = meds_aspirin[0].id
-    paracetamol_id = meds_paracetamol[0].id
+    aspirin_id = created_meds_aspirin[0].id
+    paracetamol_id = created_meds_paracetamol[0].id
     
     # When: User reports taking specific medication at time
     user_message = "Принял Аспирин в 10:00"

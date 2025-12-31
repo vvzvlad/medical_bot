@@ -34,19 +34,19 @@ async def test_delete_by_name_all_matching(
     await data_manager.create_user(user_id, "+03:00")
     
     # Add aspirin at different times
-    meds_10 = await schedule_manager.add_medication(
+    created_meds_10, skipped_10 = await schedule_manager.add_medication(
         user_id=user_id,
         name="аспирин",
         times=["10:00"],
         dosage="200 мг"
     )
-    meds_14 = await schedule_manager.add_medication(
+    created_meds_14, skipped_14 = await schedule_manager.add_medication(
         user_id=user_id,
         name="аспирин",
         times=["14:00"],
         dosage="200 мг"
     )
-    meds_18 = await schedule_manager.add_medication(
+    created_meds_18, skipped_18 = await schedule_manager.add_medication(
         user_id=user_id,
         name="аспирин",
         times=["18:00"],
@@ -62,7 +62,7 @@ async def test_delete_by_name_all_matching(
     )
     
     # Collect all aspirin IDs
-    aspirin_ids = [meds_10[0].id, meds_14[0].id, meds_18[0].id]
+    aspirin_ids = [created_meds_10[0].id, created_meds_14[0].id, created_meds_18[0].id]
     
     # When: User requests to delete aspirin
     user_message = "Удали аспирин"
@@ -122,26 +122,26 @@ async def test_delete_specific_time(
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    meds_10 = await schedule_manager.add_medication(
+    created_meds_10, skipped_10 = await schedule_manager.add_medication(
         user_id=user_id,
         name="аспирин",
         times=["10:00"],
         dosage="200 мг"
     )
-    meds_14 = await schedule_manager.add_medication(
+    created_meds_14, skipped_14 = await schedule_manager.add_medication(
         user_id=user_id,
         name="аспирин",
         times=["14:00"],
         dosage="200 мг"
     )
-    meds_18 = await schedule_manager.add_medication(
+    created_meds_18, skipped_18 = await schedule_manager.add_medication(
         user_id=user_id,
         name="аспирин",
         times=["18:00"],
         dosage="200 мг"
     )
     
-    target_id = meds_14[0].id
+    target_id = created_meds_14[0].id
     
     # When: User requests to delete aspirin at 14:00
     user_message = "Удали аспирин в 14:00"
@@ -273,21 +273,21 @@ async def test_id_validation_filters_fictional_ids(
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    meds_aspirin = await schedule_manager.add_medication(
+    created_meds_aspirin, skipped_aspirin = await schedule_manager.add_medication(
         user_id=user_id,
         name="аспирин",
         times=["10:00"],
         dosage="200 мг"
     )
-    meds_paracetamol = await schedule_manager.add_medication(
+    created_meds_paracetamol, skipped_paracetamol = await schedule_manager.add_medication(
         user_id=user_id,
         name="парацетамол",
         times=["14:00"],
         dosage="400 мг"
     )
     
-    real_aspirin_id = meds_aspirin[0].id
-    real_paracetamol_id = meds_paracetamol[0].id
+    real_aspirin_id = created_meds_aspirin[0].id
+    real_paracetamol_id = created_meds_paracetamol[0].id
     
     # When: LLM returns fictional IDs mixed with real ones
     user_message = "Удали аспирин"
@@ -540,27 +540,27 @@ async def test_delete_multiple_different_medications(
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    meds_aspirin = await schedule_manager.add_medication(
+    created_meds_aspirin, skipped_aspirin = await schedule_manager.add_medication(
         user_id=user_id,
         name="аспирин",
         times=["10:00"],
         dosage="200 мг"
     )
-    meds_paracetamol = await schedule_manager.add_medication(
+    created_meds_paracetamol, skipped_paracetamol = await schedule_manager.add_medication(
         user_id=user_id,
         name="парацетамол",
         times=["14:00"],
         dosage="400 мг"
     )
-    meds_ibuprofen = await schedule_manager.add_medication(
+    created_meds_ibuprofen, skipped_ibuprofen = await schedule_manager.add_medication(
         user_id=user_id,
         name="ибупрофен",
         times=["18:00"],
         dosage="300 мг"
     )
     
-    aspirin_id = meds_aspirin[0].id
-    paracetamol_id = meds_paracetamol[0].id
+    aspirin_id = created_meds_aspirin[0].id
+    paracetamol_id = created_meds_paracetamol[0].id
     
     # When: User requests to delete multiple medications
     user_message = "Удали аспирин и парацетамол"
@@ -626,13 +626,13 @@ async def test_delete_with_invalid_ids_name_fallback(
     await data_manager.create_user(user_id, "+03:00")
     
     # Add "героин" at different times
-    meds_heroin_10 = await schedule_manager.add_medication(
+    created_meds_heroin_10, skipped_heroin_10 = await schedule_manager.add_medication(
         user_id=user_id,
         name="героин",
         times=["10:00"],
         dosage="100 мг"
     )
-    meds_heroin_14 = await schedule_manager.add_medication(
+    created_meds_heroin_14, skipped_heroin_14 = await schedule_manager.add_medication(
         user_id=user_id,
         name="героин",
         times=["14:00"],
@@ -640,15 +640,15 @@ async def test_delete_with_invalid_ids_name_fallback(
     )
     
     # Add another medication to ensure we don't delete everything
-    meds_aspirin = await schedule_manager.add_medication(
+    created_meds_aspirin, skipped_aspirin = await schedule_manager.add_medication(
         user_id=user_id,
         name="аспирин",
         times=["12:00"],
         dosage="200 мг"
     )
     
-    real_heroin_ids = [meds_heroin_10[0].id, meds_heroin_14[0].id]
-    real_aspirin_id = meds_aspirin[0].id
+    real_heroin_ids = [created_meds_heroin_10[0].id, created_meds_heroin_14[0].id]
+    real_aspirin_id = created_meds_aspirin[0].id
     
     # When: User requests to delete героин
     user_message = "удали весь героин"
@@ -736,14 +736,14 @@ async def test_delete_confirmation_includes_medication_name(
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    meds = await schedule_manager.add_medication(
+    created_meds, skipped = await schedule_manager.add_medication(
         user_id=user_id,
         name="Габапентин",
         times=["10:00"],
         dosage="300 мг"
     )
     
-    med_id = meds[0].id
+    med_id = created_meds[0].id
     
     # When: User requests to delete medication
     user_message = "удали габапентин"
@@ -812,14 +812,14 @@ async def test_delete_confirmation_various_medications(
     
     for med_name, expected_capitalized in test_cases:
         # Add medication
-        meds = await schedule_manager.add_medication(
+        created_meds, skipped = await schedule_manager.add_medication(
             user_id=user_id,
             name=med_name,
             times=["10:00"],
             dosage="100 мг"
         )
         
-        med_id = meds[0].id
+        med_id = created_meds[0].id
         
         # Get current schedule
         schedule = await schedule_manager.get_user_schedule(user_id)
@@ -873,14 +873,14 @@ async def test_delete_confirmation_without_medication_name(
     user_id = 123456789
     await data_manager.create_user(user_id, "+03:00")
     
-    meds = await schedule_manager.add_medication(
+    created_meds, skipped = await schedule_manager.add_medication(
         user_id=user_id,
         name="аспирин",
         times=["10:00"],
         dosage="200 мг"
     )
     
-    med_id = meds[0].id
+    med_id = created_meds[0].id
     
     # When: LLM returns result without medication_name
     user_message = "удали"
