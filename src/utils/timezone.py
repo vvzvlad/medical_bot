@@ -40,11 +40,11 @@ def parse_timezone_offset(offset_str: str) -> timedelta:
         hours = int(hours_str)
         minutes = int(minutes_str)
         
-        # Validate ranges
-        if not (0 <= hours <= 14):
-            raise ValueError(f"Hours out of range: {hours}")
+        # Validate ranges (Pacific territories use +20:00, extended range needed)
+        if not (-12 <= hours <= 20):
+            raise ValueError(f"Hours out of range: {hours}. Must be between -12 and 20")
         if not (0 <= minutes <= 59):
-            raise ValueError(f"Minutes out of range: {minutes}")
+            raise ValueError(f"Minutes out of range: {minutes}. Must be between 0 and 59")
         
         # Create timedelta
         total_minutes = sign * (hours * 60 + minutes)
