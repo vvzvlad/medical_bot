@@ -730,19 +730,60 @@ async def handle_done_command(message: Message, user_id: int, user_message: str,
         logger.info(f"Processing done command for user {user_id}. User message: {user_message}")
         logger.info(f"User schedule: {schedule}")
         
+        # Add debug logging for available medication IDs
+        available_ids = [med['id'] for med in schedule]
+        logger.debug(f"Available medication IDs for user {user_id}: {available_ids}")
+        
         result = await groq_client.process_done_command(user_message, schedule)
         await delete_thinking_message(thinking_msg)
         
         logger.info(f"LLM result for done command: {result}")
         
+        # Add validation for LLM returned IDs
+        if 'medication_ids' in result:
+            llm_ids = result['medication_ids']
+            valid_ids = [med_id for med_id in llm_ids if med_id in available_ids]
+            invalid_ids = [med_id for med_id in llm_ids if med_id not in available_ids]
+            
+            if invalid_ids:
+                logger.warning(f"LLM returned invalid medication IDs for user {user_id}: {invalid_ids}. Valid IDs: {available_ids}")
+                # Filter to only valid IDs
+                result['medication_ids'] = valid_ids
+        
         medication_name = result.get("medication_name")
         specified_time = result.get("time")
         medication_ids = result.get("medication_ids", [])
         
+        # Validate that we have valid medication IDs
         if not medication_ids:
             logger.warning(f"No medication_ids returned by LLM for user {user_id}. User message: {user_message}")
             await message.answer("Не удалось определить, какой медикамент вы приняли. Попробуйте переформулировать.")
             return
+        
+        # Filter medication IDs to only include those that exist in the current schedule
+        valid_medication_ids = [med.id for med in medications]
+        filtered_ids = [med_id for med_id in medication_ids if med_id in valid_medication_ids]
+        
+        if not filtered_ids:
+            # No valid medications found - try to find by name
+            if medication_name:
+                logger.info(f"No valid medication IDs found, attempting to match by name: {medication_name}")
+                matching_meds = [med for med in medications if med.name.lower() == medication_name.lower()]
+                
+                if matching_meds:
+                    filtered_ids = [med.id for med in matching_meds]
+                    logger.info(f"Found {len(filtered_ids)} medications matching name '{medication_name}' for user {user_id}")
+                else:
+                    logger.warning(f"No medications found matching name '{medication_name}' for user {user_id}")
+                    await message.answer(f"Медикамент '{medication_name}' не найден в вашем расписании.")
+                    return
+            else:
+                logger.warning(f"No valid medication IDs and no medication name for user {user_id}")
+                await message.answer("Не удалось определить, какой медикамент вы приняли. Попробуйте переформулировать.")
+                return
+        
+        # Use filtered IDs
+        medication_ids = filtered_ids
         
         # If user specified a time, validate it matches a scheduled time
         if specified_time:
