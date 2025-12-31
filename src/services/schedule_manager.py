@@ -1,11 +1,13 @@
 """Schedule manager for medication bot."""
 
+from datetime import timedelta
 from typing import Optional
 
 from loguru import logger
 
 from src.data.models import Medication, UserData
 from src.data.storage import DataManager
+from src.utils.timezone import get_user_current_time
 
 
 class ScheduleManager:
@@ -94,6 +96,9 @@ class ScheduleManager:
             else:
                 times_to_add.append(time)
         
+        # Get current time in user's timezone (once, before the loop)
+        current_time = get_user_current_time(user_data.timezone_offset)
+        
         # Create medication entries for non-duplicate times
         created_medications = []
         for time in times_to_add:
@@ -103,10 +108,23 @@ class ScheduleManager:
                 dosage=dosage,
             )
             created_medications.append(medication)
-            logger.info(
-                f"Added medication for user {user_id}: {name} at {time} "
-                f"(dosage: {dosage or 'not specified'})"
-            )
+            
+            # If time already passed today, mark as taken yesterday to prevent immediate notification
+            med_hour, med_minute = map(int, time.split(':'))
+            med_datetime = current_time.replace(hour=med_hour, minute=med_minute, second=0, microsecond=0)
+            
+            if current_time > med_datetime:
+                yesterday = current_time - timedelta(days=1)
+                medication.last_taken = int(yesterday.timestamp())
+                logger.info(
+                    f"Medication {name} at {time} added after scheduled time. "
+                    f"Marked as taken yesterday to prevent immediate notification."
+                )
+            else:
+                logger.info(
+                    f"Added medication for user {user_id}: {name} at {time} "
+                    f"(dosage: {dosage or 'not specified'})"
+                )
         
         # Save updated data only if medications were added
         if created_medications:
