@@ -257,10 +257,9 @@ async def handle_text_message(message: Message):
             await handle_done_command(message, user_id, user_message, thinking_msg)
             
         elif command_type == "help":
-            # DEBUG: Log that help command was detected but not handled
-            logger.warning(
-                f"HELP COMMAND DETECTED but no handler exists! user_id={user_id}, message={user_message}",
-                extra={"command_type": command_type, "user_id": user_id, "user_message": user_message}
+            logger.info(
+                f"Help command detected for user {user_id}, routing to handle_help_command",
+                extra={"user_id": user_id, "user_message": user_message}
             )
             await delete_thinking_message(thinking_msg)
             await handle_help_command(message, user_id, thinking_msg)
