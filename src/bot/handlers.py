@@ -256,7 +256,20 @@ async def handle_text_message(message: Message):
         elif command_type == "done":
             await handle_done_command(message, user_id, user_message, thinking_msg)
             
+        elif command_type == "help":
+            # DEBUG: Log that help command was detected but not handled
+            logger.warning(
+                f"HELP COMMAND DETECTED but no handler exists! user_id={user_id}, message={user_message}",
+                extra={"command_type": command_type, "user_id": user_id, "user_message": user_message}
+            )
+            await delete_thinking_message(thinking_msg)
+            await handle_help_command(message, user_id, thinking_msg)
+            
         else:  # unknown
+            logger.info(
+                f"Unknown command type detected: {command_type}, routing to handle_unknown_command",
+                extra={"command_type": command_type, "user_id": user_id}
+            )
             await handle_unknown_command(message, user_message, thinking_msg)
             
     except Exception as e:
@@ -798,6 +811,32 @@ async def handle_done_command(message: Message, user_id: int, user_message: str,
         logger.error(f"Error marking medication as done for user {user_id}: {e}", exc_info=True)
         await delete_thinking_message(thinking_msg)
         await message.answer("Произошла ошибка при отметке приема.")
+
+
+async def handle_help_command(message: Message, user_id: int, thinking_msg: Optional[Message] = None):
+    """Handle help command - show bot capabilities.
+    
+    Args:
+        message: Incoming message
+        user_id: User ID
+        thinking_msg: Optional thinking message to delete
+    """
+    try:
+        result = await groq_client.process_help_command()
+        await delete_thinking_message(thinking_msg)
+        help_message = result.get("message", "Я бот для управления приемом медикаментов.\n\nДоступные команды:\n- Добавь [название] в [время]\n- Что я принимаю - показать расписание\n- Удали [название]\n- Измени время [название] на [время]")
+        await message.answer(help_message)
+        
+        logger.info(f"Help command processed for user {user_id}")
+        
+    except GroqAPIError as e:
+        logger.error(f"LLM API error in help command for user {user_id}: {e}")
+        await delete_thinking_message(thinking_msg)
+        await message.answer("Я бот для управления приемом медикаментов.\n\nДоступные команды:\n- Добавь [название] в [время]\n- Что я принимаю - показать расписание\n- Удали [название]\n- Измени время [название] на [вреремя]")
+    except Exception as e:
+        logger.error(f"Error handling help command for user {user_id}: {e}")
+        await delete_thinking_message(thinking_msg)
+        await message.answer("Произошла ошибка при получении справки.")
 
 
 async def handle_unknown_command(message: Message, user_message: str, thinking_msg: Optional[Message] = None):
