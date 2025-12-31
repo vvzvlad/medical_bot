@@ -841,18 +841,38 @@ async def handle_done_command(message: Message, user_id: int, user_message: str,
             logger.info(f"Marking medication {med_id} as taken for user {user_id}")
             await schedule_manager.mark_medication_taken(user_id, med_id)
         
-        # Get medication name from the medication object for the confirmation message
+        # Get medication details for the confirmation message
         medication_name_display = None
+        medication_time_display = None
+        medication_dosage_display = None
+        
         if medication_ids:
             first_med = next((med for med in medications if med.id == medication_ids[0]), None)
             if first_med:
                 medication_name_display = first_med.name
+                medication_time_display = first_med.time
+                medication_dosage_display = first_med.dosage
         
-        # Send confirmation message with medication name
-        if medication_name_display:
-            await message.answer(f"Отмечено как принято: {medication_name_display} ✓")
-        else:
-            await message.answer("Отмечено как принято ✓")
+        # Generate confirmation message using LLM with fallback to simple template
+        try:
+            confirmation_message = await groq_client.generate_confirmation_message(
+                medication_name=medication_name_display or "",
+                medication_time=medication_time_display,
+                dosage=medication_dosage_display
+            )
+            await message.answer(confirmation_message)
+        except GroqAPIError as e:
+            logger.warning(f"Failed to generate LLM confirmation message, using fallback: {e}")
+            if medication_name_display:
+                await message.answer(f"Отмечено как принято: {medication_name_display} ✓")
+            else:
+                await message.answer("Отмечено как принято ✓")
+        except Exception as e:
+            logger.error(f"Unexpected error generating confirmation message: {e}")
+            if medication_name_display:
+                await message.answer(f"Отмечено как принято: {medication_name_display} ✓")
+            else:
+                await message.answer("Отмечено как принято ✓")
         
         logger.info(f"Successfully marked medication as taken for user {user_id}: {medication_ids}")
         

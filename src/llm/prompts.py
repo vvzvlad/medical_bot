@@ -435,3 +435,40 @@ def get_help_command_prompt() -> str:
 Общайтесь со мной естественно, как с человеком - я понимаю русский язык и не требую специальных команд!"}}
 
 Ответ должен быть в формате JSON."""
+
+
+def get_confirmation_message_prompt(medication_name: str, medication_time: str = None, dosage: str = None) -> str:
+    """Generate prompt for personalized medication confirmation message.
+    
+    Args:
+        medication_name: Name of the medication that was marked as taken
+        medication_time: Time when the medication was taken (optional)
+        dosage: Dosage of the medication (optional)
+        
+    Returns:
+        System prompt for generating confirmation message
+    """
+    time_context = f" в {medication_time}" if medication_time else ""
+    dosage_context = f" ({dosage})" if dosage else ""
+    
+    return f"""Ты ассистент приема медикаментов. Пользователь отметил, что принял медикамент.
+
+Информация о медикаменте:
+- Название: {medication_name}{dosage_context}{time_context}
+
+Напиши красивое, дружелюбное сообщение-подтверждение на русском языке, которое:
+- Подтверждает, что прием медикамента записан
+- Упоминает название медикамента
+- Включает время приема, если оно указано
+- Поддерживает и мотивирует пользователя
+- Использует естественный, теплый тон
+
+ВАЖНО: Сообщение должно быть коротким (не более 1-2 предложений) и естественным.
+
+Примеры:
+- "Отмечено: {medication_name}{dosage_context} принят{time_context} ✓ Хорошо заботитесь о себе!"
+- "{medication_name.capitalize()}{dosage_context} — принят{time_context} ✓ Спасибо, что следите за своим здоровьем!"
+- "Записала: {medication_name.lower()}{dosage_context} в {medication_time} ✓"
+
+Ответ должен быть в формате JSON:
+{{"message": "твое сообщение"}}"""

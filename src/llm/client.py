@@ -396,3 +396,35 @@ class GroqClient:
         
         logger.info(f"Unknown command result: {result}")
         return result
+    
+    async def generate_confirmation_message(
+        self,
+        medication_name: str,
+        medication_time: str = None,
+        dosage: str = None
+    ) -> str:
+        """Generate personalized medication confirmation message.
+        
+        Args:
+            medication_name: Name of the medication that was marked as taken
+            medication_time: Time when the medication was taken (optional)
+            dosage: Dosage of the medication (optional)
+            
+        Returns:
+            Confirmation message string
+            
+        Raises:
+            GroqAPIError: If API request fails
+        """
+        logger.info(
+            f"Generating confirmation message for medication: {medication_name}",
+            extra={"medication_name": medication_name, "time": medication_time, "dosage": dosage}
+        )
+        
+        prompt = prompts.get_confirmation_message_prompt(medication_name, medication_time, dosage)
+        result = await self._make_request(prompt)
+        
+        message = result.get("message", f"Отмечено как принято: {medication_name} ✓")
+        logger.info(f"Generated confirmation message: {message}")
+        
+        return message
