@@ -1,6 +1,6 @@
 """Schedule manager for medication bot."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Optional
 
 from loguru import logger
@@ -114,11 +114,16 @@ class ScheduleManager:
             med_datetime = current_time.replace(hour=med_hour, minute=med_minute, second=0, microsecond=0)
             
             if current_time > med_datetime:
-                yesterday = current_time - timedelta(days=1)
-                medication.last_taken = int(yesterday.timestamp())
+                # Mark as taken at the medication's scheduled time today (in UTC)
+                # This ensures is_time_to_take() check will find same-day match
+                utc_med_time = datetime(
+                    med_datetime.year, med_datetime.month, med_datetime.day,
+                    med_hour, med_minute, 0, 0
+                )
+                medication.last_taken = int(utc_med_time.timestamp())
                 logger.info(
                     f"Medication {name} at {time} added after scheduled time. "
-                    f"Marked as taken yesterday to prevent immediate notification."
+                    f"Marked as taken today at {time} to prevent immediate notification."
                 )
             else:
                 logger.info(
