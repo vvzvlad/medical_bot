@@ -5,10 +5,10 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.filters import Command
 from datetime import datetime
 from loguru import logger
-from settings import settings
-from database import Database
-from llm_processor import LLMProcessor
-from timezone_utils import format_date_for_user
+from src.settings import settings
+from src.database import Database
+from src.llm_processor import LLMProcessor
+from src.timezone_utils import format_date_for_user
 
 
 class MedicationBot:

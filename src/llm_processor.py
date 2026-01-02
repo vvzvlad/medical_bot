@@ -2,8 +2,8 @@
 
 from typing import Dict, List, Optional
 from loguru import logger
-from llm_client import LLMClient
-from prompts import (
+from src.llm_client import LLMClient
+from src.prompts import (
     get_command_detection_prompt,
     get_add_command_prompt,
     get_delete_command_prompt,

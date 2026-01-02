@@ -4,9 +4,9 @@ import asyncio
 from datetime import datetime
 from loguru import logger
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from database import Database
-from telegram_bot import MedicationBot
-from timezone_utils import (
+from src.database import Database
+from src.telegram_bot import MedicationBot
+from src.timezone_utils import (
     get_user_current_time,
     format_date_for_user,
     is_time_to_send_notification,
@@ -99,12 +99,22 @@ class NotificationScheduler:
         """
         logger.info(f"Sending notification: {medication['name']} to user {user_id}")
         
+        # Check if there's an existing notification that should be deleted
+        status = await self.db.get_intake_status(user_id, medication["id"], date)
+        if status and status.get("reminder_message_id"):
+            # Delete the old notification message
+            try:
+                await self.bot.bot.delete_message(user_id, status["reminder_message_id"])
+                logger.debug(f"Deleted old notification message {status['reminder_message_id']} for {medication['name']}")
+            except Exception as e:
+                # Message might already be deleted or unavailable
+                logger.debug(f"Could not delete old notification message: {e}")
+        
         # Send notification via bot
         message_id = await self.bot.send_notification(user_id, medication, date)
         
         if message_id:
             # Create or update intake_status record
-            status = await self.db.get_intake_status(user_id, medication["id"], date)
             if status:
                 # Update existing record
                 await self.db.set_reminder_message_id(user_id, medication["id"], date, message_id)
@@ -256,6 +266,14 @@ class NotificationScheduler:
                     
                     if not status or not status.get("reminder_message_id"):
                         logger.info(f"Sending missed notification for {med['name']} to user {user_id}")
+                        
+                        # Delete old notification if it exists
+                        if status and status.get("reminder_message_id"):
+                            try:
+                                await self.bot.bot.delete_message(user_id, status["reminder_message_id"])
+                                logger.debug(f"Deleted old missed notification message {status['reminder_message_id']} for {med['name']}")
+                            except Exception as e:
+                                logger.debug(f"Could not delete old missed notification message: {e}")
                         
                         # Send notification with "пропущено" marker
                         dosage_str = f" ({med['dosage']})" if med.get("dosage") else ""
