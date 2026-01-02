@@ -41,7 +41,7 @@ class MedicationBot:
             Message ID of the thinking message
         """
         try:
-            message = await self.bot.send_message(chat_id, "думаю...")
+            message = await self.bot.send_message(chat_id, "Думаю...")
             return message.message_id
         except Exception as e:
             logger.error(f"Error sending thinking message: {e}")
