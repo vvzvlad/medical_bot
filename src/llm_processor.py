@@ -1,7 +1,9 @@
 """LLM processing logic for medication bot."""
 
+import time
 from typing import Dict, List, Optional
 from loguru import logger
+from src.enhanced_logger import get_enhanced_logger
 from src.llm_client import LLMClient
 from src.prompts import (
     get_command_detection_prompt,
@@ -16,41 +18,72 @@ from src.prompts import (
     get_confirmation_message_prompt
 )
 
+# Initialize enhanced logger
+enhanced_logger = get_enhanced_logger()
+
 
 class LLMProcessor:
     def __init__(self, llm_client: LLMClient):
         self.llm = llm_client
     
-    async def classify_intent(self, user_message: str) -> str:
+    async def classify_intent(self, user_message: str, user_id: Optional[int] = None) -> str:
         """Stage 1: Classify command type.
         
         Args:
             user_message: User's message text
+            user_id: Optional user ID for context logging
             
         Returns:
             Command type string
         """
+        start_time = time.time()
+        
         prompt = get_command_detection_prompt(user_message)
         response = await self.llm.complete_json(prompt, user_message)
         
+        processing_time = time.time() - start_time
         command_type = response.get("command_type", "unknown")
-        logger.info(f"Classified intent: {command_type}")
+        
+        # Log classification with detailed context
+        enhanced_logger.log_llm_classification(
+            user_id=user_id,
+            user_message=user_message,
+            classification=command_type,
+            processing_time=processing_time
+        )
+        
         return command_type
     
-    async def process_add(self, user_message: str) -> List[Dict]:
+    async def process_add(self, user_message: str, user_id: Optional[int] = None) -> List[Dict]:
         """Parse ADD command.
         
         Args:
             user_message: User's message text
+            user_id: Optional user ID for context logging
             
         Returns:
             List of medication dictionaries with name, times, and optional dosage
         """
+        start_time = time.time()
+        
         prompt = get_add_command_prompt(user_message)
         response = await self.llm.complete_json(prompt, user_message)
         
+        processing_time = time.time() - start_time
+        
         # Expected: [{"medication_name": "...", "times": [...], "dosage": "..."}]
-        return response if isinstance(response, list) else [response]
+        medications = response if isinstance(response, list) else [response]
+        
+        # Log parsing results
+        enhanced_logger.log_llm_parsing(
+            operation="add",
+            user_id=user_id,
+            user_message=user_message,
+            parsed_data=medications,
+            processing_time=processing_time
+        )
+        
+        return medications
     
     async def process_done(
         self, 

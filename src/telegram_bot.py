@@ -5,10 +5,14 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.filters import Command
 from datetime import datetime
 from loguru import logger
+from src.enhanced_logger import get_enhanced_logger
 from src.settings import settings
 from src.database import Database
 from src.llm_processor import LLMProcessor
 from src.timezone_utils import format_date_for_user
+
+# Initialize enhanced logger
+enhanced_logger = get_enhanced_logger()
 
 
 class MedicationBot:
@@ -64,45 +68,63 @@ class MedicationBot:
         user_id = message.from_user.id
         text = message.text
         
-        logger.info(f"Message from {user_id}: {text}")
+        # Set user context for detailed logging
+        user_context = {
+            'username': message.from_user.username or 'unknown',
+            'first_name': message.from_user.first_name or '',
+            'last_name': message.from_user.last_name or '',
+            'timezone': 'unknown'  # Will be updated after user lookup
+        }
+        enhanced_logger.set_user_context(user_id, user_context)
         
-        # Ensure user exists
+        # Log incoming message with detailed context
+        enhanced_logger.log_user_message(user_id, text, "incoming")
+        
+        # Ensure user exists and get timezone
         user = await self.db.get_user(user_id)
         if user is None:
             timezone_offset = settings.default_timezone
             await self.db.create_user(user_id, timezone_offset)
+            enhanced_logger.log_info("USER_CREATED", user_id, f"New user created with timezone {timezone_offset}")
         else:
             timezone_offset = user["timezone_offset"]
+            # Update user context with timezone
+            user_context['timezone'] = timezone_offset
+            enhanced_logger.set_user_context(user_id, user_context)
         
         # Send thinking message
         thinking_message_id = await self.send_thinking_message(message.chat.id)
         
         try:
-            # Stage 1: Classify
-            command_type = await self.llm.classify_intent(text)
-            
-            # Stage 2: Process
-            if command_type == "add":
-                await self._handle_add(message, text, user_id)
-            elif command_type == "done":
-                await self._handle_done(message, text, user_id, timezone_offset)
-            elif command_type == "delete":
-                await self._handle_delete(message, text, user_id)
-            elif command_type == "time_change":
-                await self._handle_time_change(message, text, user_id)
-            elif command_type == "dose_change":
-                await self._handle_dose_change(message, text, user_id)
-            elif command_type == "timezone_change":
-                await self._handle_timezone_change(message, text, user_id)
-            elif command_type == "list":
-                await self._handle_list(message, user_id)
-            elif command_type == "help":
-                await self._handle_help(message)
-            else:
-                await self._handle_unknown(message, text)
+            with enhanced_logger.timer("MESSAGE_PROCESSING", user_id, message_text=text):
+                # Stage 1: Classify intent
+                with enhanced_logger.timer("LLM_CLASSIFICATION", user_id):
+                    command_type = await self.llm.classify_intent(text, user_id)
+                
+                enhanced_logger.log_info("INTENT_CLASSIFIED", user_id, f"Classified as: {command_type}")
+                
+                # Stage 2: Process based on classification
+                if command_type == "add":
+                    await self._handle_add(message, text, user_id)
+                elif command_type == "done":
+                    await self._handle_done(message, text, user_id, timezone_offset)
+                elif command_type == "delete":
+                    await self._handle_delete(message, text, user_id)
+                elif command_type == "time_change":
+                    await self._handle_time_change(message, text, user_id)
+                elif command_type == "dose_change":
+                    await self._handle_dose_change(message, text, user_id)
+                elif command_type == "timezone_change":
+                    await self._handle_timezone_change(message, text, user_id)
+                elif command_type == "list":
+                    await self._handle_list(message, user_id)
+                elif command_type == "help":
+                    await self._handle_help(message)
+                else:
+                    await self._handle_unknown(message, text)
         
         except Exception as e:
-            logger.error(f"Error processing message: {e}", exc_info=True)
+            enhanced_logger.log_error("MESSAGE_PROCESSING", user_id, str(e), {"message_text": text})
             await message.reply("Произошла ошибка. Попробуйте еще раз.")
         finally:
             # Delete thinking message if it was sent
@@ -117,25 +139,32 @@ class MedicationBot:
             text: User's message text
             user_id: Telegram user ID
         """
-        # Parse medications
-        medications = await self.llm.process_add(text)
+        # Parse medications with detailed logging
+        with enhanced_logger.timer("LLM_PARSING_ADD", user_id, user_message=text):
+            medications = await self.llm.process_add(text, user_id)
         
         added = []
         duplicates = []
+        
+        enhanced_logger.log_info("MEDICATION_PARSING_RESULT", user_id, f"Parsed {len(medications)} medications from text", medications_count=len(medications))
         
         for med_data in medications:
             name = med_data["medication_name"]
             dosage = med_data.get("dosage")
             times = med_data["times"]
             
+            enhanced_logger.log_info("PROCESSING_MEDICATION", user_id, f"Processing {name} at times {times}", dosage=dosage)
+            
             for time in times:
                 # Check duplicate
                 if await self.db.check_duplicate(user_id, name, time):
                     duplicates.append(f"{name} в {time}")
+                    enhanced_logger.log_info("DUPLICATE_MEDICATION_FOUND", user_id, f"Duplicate found: {name} at {time}")
                 else:
                     med_id = await self.db.add_medication(user_id, name, time, dosage)
                     if med_id:
                         added.append(f"{name} в {time}")
+                        enhanced_logger.log_info("MEDICATION_ADDED_SUCCESS", user_id, f"Successfully added {name} at {time} (ID: {med_id})")
         
         # Format response
         if added and duplicates:
@@ -148,7 +177,13 @@ class MedicationBot:
         else:
             response = "Не удалось добавить медикаменты. Попробуйте переформулировать."
         
-        await message.reply(response)
+        enhanced_logger.log_info("SENDING_RESPONSE", user_id, f"Response: {response}",
+                               added_count=len(added), duplicates_count=len(duplicates))
+        
+        with enhanced_logger.timer("TELEGRAM_API_SEND_MESSAGE", user_id, response_text=response):
+            await message.reply(response)
+        
+        enhanced_logger.log_info("RESPONSE_SENT_SUCCESS", user_id, "Response sent successfully")
     
     async def _handle_done(self, message: Message, text: str, user_id: int, timezone_offset: str):
         """Handle DONE command.

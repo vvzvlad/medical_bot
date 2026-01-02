@@ -4,6 +4,7 @@ import asyncio
 import sys
 from pathlib import Path
 from loguru import logger
+from src.enhanced_logger import setup_enhanced_logger, get_enhanced_logger
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -15,19 +16,15 @@ from src.llm_processor import LLMProcessor
 from src.telegram_bot import MedicationBot
 from src.scheduler import NotificationScheduler
 
+# Initialize enhanced logger
+enhanced_logger = setup_enhanced_logger(settings.log_level)
+
 
 async def main():
     """Main application entry point."""
     
-    # Configure logging to stdout with loguru
-    logger.remove()  # Remove default handler
-    logger.add(
-        sys.stdout,
-        level=settings.log_level,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>"
-    )
-    
-    logger.info("Starting Medication Reminder Bot")
+    logger.info("🚀 STARTING Medication Reminder Bot")
+    logger.info(f"Configuration: Log level={settings.log_level}, Database={settings.database_path}")
     
     # Initialize database
     database = Database(settings.database_path)

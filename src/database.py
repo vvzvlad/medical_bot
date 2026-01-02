@@ -2,9 +2,14 @@
 
 import aiosqlite
 import asyncio
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+from src.enhanced_logger import get_enhanced_logger
+
+# Initialize enhanced logger
+enhanced_logger = get_enhanced_logger()
 
 
 class Database:
@@ -128,10 +133,10 @@ class Database:
             return dict(row) if row else None
     
     async def add_medication(
-        self, 
-        user_id: int, 
-        name: str, 
-        time: str, 
+        self,
+        user_id: int,
+        name: str,
+        time: str,
         dosage: Optional[str] = None
     ) -> Optional[int]:
         """Add medication. Returns medication_id or None if duplicate.
@@ -145,7 +150,9 @@ class Database:
         Returns:
             Medication ID if added, None if duplicate
         """
+        start_time = time.time()
         now = int(datetime.utcnow().timestamp())
+        
         async with aiosqlite.connect(self.db_path) as db:
             try:
                 cursor = await db.execute(
@@ -154,9 +161,40 @@ class Database:
                     (user_id, name.lower(), dosage, time, now)
                 )
                 await db.commit()
-                return cursor.lastrowid
+                
+                medication_id = cursor.lastrowid
+                operation_time = time.time() - start_time
+                
+                # Log successful medication addition
+                enhanced_logger.log_database_operation(
+                    operation="INSERT",
+                    user_id=user_id,
+                    table="medications",
+                    data={
+                        "medication_id": medication_id,
+                        "name": name,
+                        "time": time,
+                        "dosage": dosage,
+                        "created_at": now
+                    },
+                    affected_rows=1,
+                    operation_time=operation_time
+                )
+                
+                return medication_id
+                
             except aiosqlite.IntegrityError:
                 # Duplicate (user_id, name, time)
+                operation_time = time.time() - start_time
+                
+                # Log duplicate medication attempt
+                enhanced_logger.log_warning(
+                    "DUPLICATE_MEDICATION",
+                    user_id=user_id,
+                    warning_message=f"Medication '{name}' at time '{time}' already exists",
+                    context={"operation_time": operation_time}
+                )
+                
                 return None
     
     async def check_duplicate(self, user_id: int, name: str, time: str) -> bool:

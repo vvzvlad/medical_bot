@@ -3,8 +3,13 @@
 import httpx
 import json
 import asyncio
+import time
 from typing import Dict, Optional
 from loguru import logger
+from src.enhanced_logger import get_enhanced_logger
+
+# Initialize enhanced logger
+enhanced_logger = get_enhanced_logger()
 
 
 class LLMClient:
@@ -16,12 +21,13 @@ class LLMClient:
         self.base_url = "https://api.groq.com/openai/v1/chat/completions"
     
     async def complete(
-        self, 
-        system_prompt: str, 
+        self,
+        system_prompt: str,
         user_message: str,
         temperature: float = 0.7,
         max_tokens: int = 500,
-        json_mode: bool = False
+        json_mode: bool = False,
+        user_id: Optional[int] = None
     ) -> str:
         """Send completion request to Groq API.
         
@@ -31,6 +37,7 @@ class LLMClient:
             temperature: Temperature for generation (default 0.7)
             max_tokens: Maximum tokens to generate (default 500)
             json_mode: Whether to request JSON response (default False)
+            user_id: Optional user ID for context logging
             
         Returns:
             LLM response content
@@ -38,6 +45,8 @@ class LLMClient:
         Raises:
             Exception: If request fails after retries
         """
+        start_time = time.time()
+        
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -69,22 +78,48 @@ class LLMClient:
                     data = response.json()
                     content = data["choices"][0]["message"]["content"]
                     
-                    logger.debug(f"LLM response: {content[:100]}...")
+                    api_time = time.time() - start_time
+                    
+                    # Log successful API call with detailed context
+                    enhanced_logger.log_info(
+                        "LLM_API_SUCCESS",
+                        user_id=user_id,
+                        message=f"Model: {self.model}, Attempt: {attempt + 1}",
+                        response_length=len(content),
+                        api_time=api_time,
+                        json_mode=json_mode
+                    )
+                    
                     return content
                     
             except httpx.TimeoutException:
-                logger.warning(f"LLM timeout (attempt {attempt + 1}/{self.max_retries})")
+                enhanced_logger.log_warning(
+                    "LLM_API_TIMEOUT",
+                    user_id=user_id,
+                    warning_message=f"Timeout on attempt {attempt + 1}/{self.max_retries}",
+                    context={"model": self.model, "max_tokens": max_tokens}
+                )
                 if attempt == self.max_retries - 1:
                     raise
                 await asyncio.sleep(2 ** attempt)  # Exponential backoff
             except httpx.HTTPStatusError as e:
-                logger.error(f"LLM HTTP error: {e.response.status_code}")
+                enhanced_logger.log_error(
+                    "LLM_API_HTTP_ERROR",
+                    user_id=user_id,
+                    error_message=f"HTTP {e.response.status_code} on attempt {attempt + 1}",
+                    context={"model": self.model, "status_code": e.response.status_code}
+                )
                 if e.response.status_code == 429:  # Rate limit
                     await asyncio.sleep(2 ** attempt)  # Exponential backoff
                 else:
                     raise
             except Exception as e:
-                logger.error(f"LLM error: {e}")
+                enhanced_logger.log_error(
+                    "LLM_API_ERROR",
+                    user_id=user_id,
+                    error_message=f"General error on attempt {attempt + 1}: {str(e)}",
+                    context={"model": self.model, "error_type": type(e).__name__}
+                )
                 if attempt == self.max_retries - 1:
                     raise
                 await asyncio.sleep(2 ** attempt)  # Exponential backoff

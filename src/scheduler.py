@@ -1,8 +1,10 @@
 """Notification scheduler for medication bot."""
 
 import asyncio
+import time
 from datetime import datetime
 from loguru import logger
+from src.enhanced_logger import get_enhanced_logger
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from src.database import Database
 from src.telegram_bot import MedicationBot
@@ -13,6 +15,9 @@ from src.timezone_utils import (
     should_send_hourly_reminder,
     is_time_for_next_dose
 )
+
+# Initialize enhanced logger
+enhanced_logger = get_enhanced_logger()
 
 
 class NotificationScheduler:
@@ -97,7 +102,16 @@ class NotificationScheduler:
             medication: Medication dictionary
             date: Date in YYYY-MM-DD format
         """
-        logger.info(f"Sending notification: {medication['name']} to user {user_id}")
+        start_time = time.time()
+        
+        # Log notification attempt
+        enhanced_logger.log_scheduler_operation(
+            operation="send_notification",
+            user_id=user_id,
+            medication_data=medication,
+            reason="Scheduled medication reminder",
+            scheduled_time=medication.get('time', 'unknown')
+        )
         
         # Check if there's an existing notification that should be deleted
         status = await self.db.get_intake_status(user_id, medication["id"], date)
@@ -105,15 +119,33 @@ class NotificationScheduler:
             # Delete the old notification message
             try:
                 await self.bot.bot.delete_message(user_id, status["reminder_message_id"])
-                logger.debug(f"Deleted old notification message {status['reminder_message_id']} for {medication['name']}")
+                enhanced_logger.log_info(
+                    "DELETED_OLD_NOTIFICATION",
+                    user_id=user_id,
+                    message=f"Deleted old notification message {status['reminder_message_id']} for {medication['name']}"
+                )
             except Exception as e:
                 # Message might already be deleted or unavailable
-                logger.debug(f"Could not delete old notification message: {e}")
+                enhanced_logger.log_warning(
+                    "DELETE_OLD_NOTIFICATION_FAILED",
+                    user_id=user_id,
+                    warning_message=f"Could not delete old notification message: {e}",
+                    context={"medication_name": medication['name']}
+                )
         
         # Send notification via bot
         message_id = await self.bot.send_notification(user_id, medication, date)
         
+        api_time = time.time() - start_time
+        
         if message_id:
+            enhanced_logger.log_info(
+                "NOTIFICATION_SENT_SUCCESS",
+                user_id=user_id,
+                message=f"Sent notification for {medication['name']} (Message ID: {message_id})",
+                api_time=api_time
+            )
+            
             # Create or update intake_status record
             if status:
                 # Update existing record
@@ -126,6 +158,13 @@ class NotificationScheduler:
                     date,
                     message_id
                 )
+        else:
+            enhanced_logger.log_error(
+                "NOTIFICATION_SEND_FAILED",
+                user_id=user_id,
+                error_message=f"Failed to send notification for {medication['name']}",
+                context={"api_time": api_time}
+            )
     
     async def _check_and_send_reminders(self):
         """Check for pending reminders (hourly repeats)."""
