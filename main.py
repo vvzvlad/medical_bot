@@ -19,10 +19,10 @@ from src.scheduler import NotificationScheduler
 async def main():
     """Main application entry point."""
     
-    # Configure logging to stdout with auto-flush
+    # Configure logging to stdout with loguru
     logger.remove()  # Remove default handler
     logger.add(
-        lambda msg: print(msg, flush=True),
+        sys.stdout,
         level=settings.log_level,
         format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>"
     )
