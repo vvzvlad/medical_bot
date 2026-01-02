@@ -136,7 +136,7 @@ class Database:
         self,
         user_id: int,
         name: str,
-        time: str,
+        medication_time: str,
         dosage: Optional[str] = None
     ) -> Optional[int]:
         """Add medication. Returns medication_id or None if duplicate.
@@ -144,7 +144,7 @@ class Database:
         Args:
             user_id: Telegram user ID
             name: Medication name
-            time: Medication time in HH:MM format
+            medication_time: Medication time in HH:MM format
             dosage: Optional dosage information
             
         Returns:
@@ -158,7 +158,7 @@ class Database:
                 cursor = await db.execute(
                     "INSERT INTO medications (user_id, name, dosage, time, created_at) "
                     "VALUES (?, ?, ?, ?, ?)",
-                    (user_id, name.lower(), dosage, time, now)
+                    (user_id, name.lower(), dosage, medication_time, now)
                 )
                 await db.commit()
                 
@@ -173,7 +173,7 @@ class Database:
                     data={
                         "medication_id": medication_id,
                         "name": name,
-                        "time": time,
+                        "time": medication_time,
                         "dosage": dosage,
                         "created_at": now
                     },
@@ -197,13 +197,13 @@ class Database:
                 
                 return None
     
-    async def check_duplicate(self, user_id: int, name: str, time: str) -> bool:
+    async def check_duplicate(self, user_id: int, name: str, medication_time: str) -> bool:
         """Check if medication already exists.
         
         Args:
             user_id: Telegram user ID
             name: Medication name
-            time: Medication time in HH:MM format
+            medication_time: Medication time in HH:MM format
             
         Returns:
             True if duplicate exists, False otherwise
@@ -212,7 +212,7 @@ class Database:
             cursor = await db.execute(
                 "SELECT COUNT(*) FROM medications "
                 "WHERE user_id = ? AND name = ? AND time = ?",
-                (user_id, name.lower(), time)
+                (user_id, name.lower(), medication_time)
             )
             count = (await cursor.fetchone())[0]
             return count > 0
