@@ -317,6 +317,7 @@ class MedicationBot:
         
         status = result.get("status", "unknown")
         timezone_offset = result.get("timezone_offset")
+        city_name = result.get("city_name", "")
         
         if status == "clarification_needed":
             await message.reply(result.get("message", "Пожалуйста, уточните часовой пояс"))
@@ -327,7 +328,10 @@ class MedicationBot:
                 return
                 
             if await self.db.update_user_timezone(user_id, timezone_offset):
-                await message.reply(f"Часовой пояс изменен на {timezone_offset}")
+                if city_name:
+                    await message.reply(f"Часовой пояс изменен на {city_name} ({timezone_offset})")
+                else:
+                    await message.reply(f"Часовой пояс изменен на {timezone_offset}")
             else:
                 await message.reply("Не удалось изменить часовой пояс")
         else:

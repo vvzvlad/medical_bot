@@ -90,20 +90,24 @@ class Database:
             )
             await db.commit()
     
-    async def update_user_timezone(self, user_id: int, timezone_offset: str):
+    async def update_user_timezone(self, user_id: int, timezone_offset: str) -> bool:
         """Update user's timezone.
         
         Args:
             user_id: Telegram user ID
             timezone_offset: New timezone offset like '+03:00'
+            
+        Returns:
+            True if updated successfully, False otherwise
         """
         now = int(datetime.utcnow().timestamp())
         async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
+            cursor = await db.execute(
                 "UPDATE users SET timezone_offset = ?, updated_at = ? WHERE user_id = ?",
                 (timezone_offset, now, user_id)
             )
             await db.commit()
+            return cursor.rowcount > 0
     
     async def get_user(self, user_id: int) -> Optional[Dict[str, Any]]:
         """Get user data.
