@@ -124,7 +124,15 @@ class MedicationBot:
                     await self._handle_unknown(message, text)
         
         except Exception as e:
-            enhanced_logger.log_error("MESSAGE_PROCESSING", user_id, str(e), {"message_text": text})
+            # Get detailed error information including stack trace
+            import traceback
+            error_details = {
+                "message_text": text,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "stack_trace": traceback.format_exc()
+            }
+            enhanced_logger.log_error("MESSAGE_PROCESSING", user_id, f"{type(e).__name__}: {str(e)}", error_details)
             await self.bot.send_message(message.chat.id, "Произошла ошибка. Попробуйте еще раз.")
         finally:
             # Delete thinking message if it was sent
@@ -158,12 +166,32 @@ class MedicationBot:
             for time in times:
                 # Defensive programming: ensure time is treated as string
                 # This prevents the "'str' object has no attribute 'time'" error
-                if isinstance(time, str):
-                    time_str = time
-                elif isinstance(time, dict) and 'time' in time:
-                    time_str = time['time']
-                else:
-                    logger.warning(f"Unexpected time format: {time} (type: {type(time)})")
+                try:
+                    if isinstance(time, str):
+                        time_str = time
+                    elif isinstance(time, dict) and 'time' in time:
+                        time_str = time['time']
+                    else:
+                        enhanced_logger.log_warning("INVALID_TIME_FORMAT", user_id, f"Unexpected time format in medication {name}", {
+                            "time_value": str(time),
+                            "time_type": type(time).__name__,
+                            "medication_name": name
+                        })
+                        continue
+                    
+                    # Validate that time_str is actually a string
+                    if not isinstance(time_str, str):
+                        enhanced_logger.log_warning("INVALID_TIME_STRING", user_id, f"Time extracted but not string for {name}", {
+                            "extracted_time": str(time_str),
+                            "extracted_type": type(time_str).__name__
+                        })
+                        continue
+                        
+                except Exception as e:
+                    enhanced_logger.log_error("TIME_PROCESSING_ERROR", user_id, f"Error processing time for {name}: {str(e)}", {
+                        "time_data": str(time),
+                        "error_type": type(e).__name__
+                    })
                     continue
                 
                 # Check duplicate

@@ -74,6 +74,20 @@ class LLMProcessor:
         # Expected: [{"medication_name": "...", "times": [...], "dosage": "..."}]
         medications = response if isinstance(response, list) else [response]
         
+        # Log parsing results with detailed format information for debugging
+        for i, med in enumerate(medications):
+            if isinstance(med, dict) and 'times' in med:
+                times_data = med['times']
+                enhanced_logger.log_info(
+                    "LLM_PARSING_DETAILS",
+                    user_id=user_id,
+                    message=f"Medication {i+1}: {med.get('medication_name', 'unknown')}",
+                    times_count=len(times_data) if isinstance(times_data, list) else 0,
+                    times_type=type(times_data).__name__,
+                    first_time_sample=str(times_data[0]) if times_data and isinstance(times_data, list) else "empty",
+                    first_time_type=type(times_data[0]).__name__ if times_data and isinstance(times_data, list) else "N/A"
+                )
+        
         # Log parsing results
         enhanced_logger.log_llm_parsing(
             operation="add",

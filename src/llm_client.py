@@ -80,14 +80,12 @@ class LLMClient:
                     
                     api_time = time.time() - start_time
                     
-                    # Log successful API call with detailed context
+                    # Log successful API call with essential debugging info
                     enhanced_logger.log_info(
                         "LLM_API_SUCCESS",
                         user_id=user_id,
                         message=f"Model: {self.model}, Attempt: {attempt + 1}",
-                        response_length=len(content),
-                        api_time=api_time,
-                        json_mode=json_mode
+                        api_time=f"{api_time:.2f}s"
                     )
                     
                     return content
