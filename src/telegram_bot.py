@@ -156,15 +156,25 @@ class MedicationBot:
             enhanced_logger.log_info("PROCESSING_MEDICATION", user_id, f"Processing {name} at times {times}", dosage=dosage)
             
             for time in times:
-                # Check duplicate
-                if await self.db.check_duplicate(user_id, name, time):
-                    duplicates.append(f"{name} в {time}")
-                    enhanced_logger.log_info("DUPLICATE_MEDICATION_FOUND", user_id, f"Duplicate found: {name} at {time}")
+                # Defensive programming: ensure time is treated as string
+                # This prevents the "'str' object has no attribute 'time'" error
+                if isinstance(time, str):
+                    time_str = time
+                elif isinstance(time, dict) and 'time' in time:
+                    time_str = time['time']
                 else:
-                    med_id = await self.db.add_medication(user_id, name, time, dosage)
+                    logger.warning(f"Unexpected time format: {time} (type: {type(time)})")
+                    continue
+                
+                # Check duplicate
+                if await self.db.check_duplicate(user_id, name, time_str):
+                    duplicates.append(f"{name} в {time_str}")
+                    enhanced_logger.log_info("DUPLICATE_MEDICATION_FOUND", user_id, f"Duplicate found: {name} at {time_str}")
+                else:
+                    med_id = await self.db.add_medication(user_id, name, time_str, dosage)
                     if med_id:
-                        added.append(f"{name} в {time}")
-                        enhanced_logger.log_info("MEDICATION_ADDED_SUCCESS", user_id, f"Successfully added {name} at {time} (ID: {med_id})")
+                        added.append(f"{name} в {time_str}")
+                        enhanced_logger.log_info("MEDICATION_ADDED_SUCCESS", user_id, f"Successfully added {name} at {time_str} (ID: {med_id})")
         
         # Format response
         if added and duplicates:
