@@ -27,6 +27,34 @@ class MedicationBot:
         )
         self.dp.include_router(router)
     
+    async def send_thinking_message(self, chat_id: int) -> int:
+        """Send a thinking message that will be deleted later.
+        
+        Args:
+            chat_id: Telegram chat ID
+            
+        Returns:
+            Message ID of the thinking message
+        """
+        try:
+            message = await self.bot.send_message(chat_id, "думаю...")
+            return message.message_id
+        except Exception as e:
+            logger.error(f"Error sending thinking message: {e}")
+            return None
+    
+    async def delete_thinking_message(self, chat_id: int, message_id: int):
+        """Delete a thinking message.
+        
+        Args:
+            chat_id: Telegram chat ID
+            message_id: Message ID of the thinking message to delete
+        """
+        try:
+            await self.bot.delete_message(chat_id, message_id)
+        except Exception as e:
+            logger.error(f"Error deleting thinking message: {e}")
+    
     async def handle_message(self, message: Message):
         """Process incoming text message.
         
@@ -45,6 +73,9 @@ class MedicationBot:
             await self.db.create_user(user_id, timezone_offset)
         else:
             timezone_offset = user["timezone_offset"]
+        
+        # Send thinking message
+        thinking_message_id = await self.send_thinking_message(message.chat.id)
         
         try:
             # Stage 1: Classify
@@ -73,6 +104,10 @@ class MedicationBot:
         except Exception as e:
             logger.error(f"Error processing message: {e}", exc_info=True)
             await message.reply("Произошла ошибка. Попробуйте еще раз.")
+        finally:
+            # Delete thinking message if it was sent
+            if thinking_message_id:
+                await self.delete_thinking_message(message.chat.id, thinking_message_id)
     
     async def _handle_add(self, message: Message, text: str, user_id: int):
         """Handle ADD command.
