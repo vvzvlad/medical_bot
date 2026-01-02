@@ -175,19 +175,47 @@ def get_delete_command_prompt(user_message: str, schedule: list) -> str:
     Returns:
         System prompt for delete command parsing
     """
+    # Limit schedule length to prevent token overflow and 400 errors
+    # If schedule is too long, show only relevant medications based on name matching
+    max_schedule_items = 20
+    
+    if len(schedule) > max_schedule_items:
+        # Try to filter medications that might be relevant to the user's request
+        user_words = set(user_message.lower().split())
+        relevant_meds = []
+        
+        for med in schedule:
+            med_name_words = set(med['name'].lower().split())
+            # Check if any word from medication name appears in user message
+            if user_words.intersection(med_name_words):
+                relevant_meds.append(med)
+        
+        # If we found relevant medications, use them; otherwise, use first N medications
+        if relevant_meds and len(relevant_meds) <= max_schedule_items:
+            filtered_schedule = relevant_meds
+        else:
+            filtered_schedule = schedule[:max_schedule_items]
+    else:
+        filtered_schedule = schedule
+    
     schedule_text = "\n".join([
         f"ID {med['id']}: {med['name']} {med.get('dosage', '')} в {med['time']}"
-        for med in schedule
+        for med in filtered_schedule
     ])
     
-    # Extract valid IDs from schedule
-    valid_ids = [med['id'] for med in schedule]
+    # Extract valid IDs from filtered schedule
+    valid_ids = [med['id'] for med in filtered_schedule]
     valid_ids_str = ", ".join(map(str, valid_ids))
+    
+    # Add note about filtering if we truncated the schedule
+    truncation_note = ""
+    if len(filtered_schedule) < len(schedule):
+        truncation_note = f"\n\nПримечание: Показаны только первые {len(filtered_schedule)} из {len(schedule)} медикаментов. Если нужного медикамента нет в списке, уточните запрос."
     
     return f"""Ты ассистент приема медикаментов. Пользователь хочет удалить медикамент из расписания.
 
 Текущее расписание пользователя:
-{schedule_text}
+{schedule_text}{truncation_note}
 
 ВАЖНО: Ты ДОЛЖЕН вернуть только ID из списка выше. НЕ придумывай новые ID.
 Доступные ID в расписании: [{valid_ids_str}]
@@ -204,6 +232,12 @@ def get_delete_command_prompt(user_message: str, schedule: list) -> str:
 - Примеры: "Героин" (не "героина"), "Габапентин" (не "габапентина"), "Ламотриджин" (не "ламотриджина")
 - Название должно быть с ЗАГЛАВНОЙ БУКВЫ (первая буква заглавная, остальные строчные)
 
+ВАЖНО О ФОРМАТЕ ОТВЕТА:
+- Всегда возвращай массив ID как отдельные числа: "medication_ids": [1, 2, 3]
+- НИКОГДА не объединяй ID в одно большое число
+- Правильно: "medication_ids": [123, 456, 789]
+- Неправильно: "medication_ids": [123456789]
+
 Определи, какой медикамент пользователь хочет удалить:
 - Если под определение попадает один медикамент, верни его ID и название
 - Если пользователь говорит "я больше не принимаю аспирин" и у него несколько аспиринов, верни все их ID и название
@@ -213,6 +247,7 @@ def get_delete_command_prompt(user_message: str, schedule: list) -> str:
 Примеры ответов:
 - Успешное удаление одного: {{"status": "success", "medication_name": "Аспирин", "medication_ids": [1]}}
 - Успешное удаление всех с одним названием: {{"status": "success", "medication_name": "Габапентин", "medication_ids": [4, 5, 6, 7]}}
+- Удаление нескольких разных медикаментов: {{"status": "success", "medication_name": "Аспирин и Парацетамол", "medication_ids": [1, 2, 3, 4]}}
 - Требуется уточнение: {{"status": "clarification_needed", "medication_name": "Аспирин", "message": "Вы принимаете аспирин в 19:00 и аспирин в 21:00, уточните, какой именно вы хотите удалить"}}
 - Медикамент не найден: {{"status": "not_found", "medication_name": "Ибупрофен", "medication_ids": []}}
 

@@ -109,6 +109,17 @@ class LLMClient:
                 )
                 if e.response.status_code == 429:  # Rate limit
                     await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                elif e.response.status_code == 400:  # Bad request - likely prompt issue
+                    if attempt < self.max_retries - 1:
+                        enhanced_logger.log_warning(
+                            "LLM_API_BAD_REQUEST_RETRY",
+                            user_id=user_id,
+                            warning_message=f"Retrying after 400 error on attempt {attempt + 1}"
+                        )
+                        await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                        continue
+                    else:
+                        raise
                 else:
                     raise
             except Exception as e:

@@ -136,8 +136,66 @@ class LLMProcessor:
         prompt = get_delete_command_prompt(user_message, user_schedule)
         response = await self.llm.complete_json(prompt, user_message)
         
-        # Expected: {"status": "...", "medication_name": "...", "medication_ids": [...]}
-        return response
+        # Handle both single response and array of responses
+        # If user asks to delete multiple medications, LLM might return array
+        if isinstance(response, list):
+            if len(response) == 1:
+                # Single medication in array format
+                return response[0]
+            elif len(response) > 1:
+                # Multiple medications - combine into single response
+                all_ids = []
+                medication_names = []
+                for item in response:
+                    if isinstance(item, dict) and 'medication_ids' in item:
+                        ids = item['medication_ids']
+                        if isinstance(ids, list):
+                            all_ids.extend(ids)
+                        else:
+                            all_ids.append(ids)
+                        if 'medication_name' in item:
+                            medication_names.append(item['medication_name'])
+                
+                # Remove duplicates and sort
+                all_ids = sorted(list(set(all_ids)))
+                
+                # Combine medication names
+                if medication_names:
+                    combined_name = " и ".join(medication_names)
+                else:
+                    combined_name = "Медикаменты"
+                
+                return {
+                    "status": "success",
+                    "medication_name": combined_name,
+                    "medication_ids": all_ids
+                }
+            else:
+                # Empty array - return not found
+                return {"status": "not_found", "medication_name": "Медикамент", "medication_ids": []}
+        else:
+            # Single response - check for ID concatenation issue and fix it
+            if isinstance(response, dict) and 'medication_ids' in response:
+                ids = response['medication_ids']
+                if isinstance(ids, list) and len(ids) == 1:
+                    # Check if this might be concatenated IDs
+                    single_id = ids[0]
+                    # If the single ID is suspiciously large, it might be concatenated
+                    # For example, if we expect IDs 3 and 5 but get 35
+                    available_ids = [med['id'] for med in user_schedule]
+                    if single_id not in available_ids and single_id > 10:
+                        # This might be concatenated IDs - try to split them
+                        # Look for the individual IDs in the concatenated number
+                        found_ids = []
+                        for avail_id in available_ids:
+                            if str(avail_id) in str(single_id):
+                                found_ids.append(avail_id)
+                        
+                        if len(found_ids) > 1:
+                            # We found multiple IDs in the concatenated number
+                            response['medication_ids'] = sorted(found_ids)
+            
+            return response
     
     async def process_time_change(
         self,
