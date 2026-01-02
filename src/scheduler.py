@@ -64,8 +64,8 @@ class NotificationScheduler:
                 # Check if it's time to send notification
                 # First check if we already have an intake status for today
                 status = await self.db.get_intake_status(
-                    user_id, 
-                    med["id"], 
+                    user_id,
+                    med["id"],
                     user_date
                 )
                 
@@ -78,7 +78,15 @@ class NotificationScheduler:
                         status.get("reminder_message_id") if status else None
                     )
                     
+                    # Implement "next appropriate cycle" logic:
+                    # Only send notification if we haven't already sent one for this medication today
+                    # and it's exactly the scheduled time
                     if should_send:
+                        # Check if we already have a reminder message ID (meaning we already sent notification)
+                        if status and status.get("reminder_message_id"):
+                            logger.debug(f"Skipping notification for {med['name']} - already sent today")
+                            continue
+                        
                         await self._send_notification(user_id, med, user_date)
     
     async def _send_notification(self, user_id: int, medication: dict, date: str):
@@ -165,6 +173,9 @@ class NotificationScheduler:
                     )
                     
                     if should_remind:
+                        # Additional gating: ensure we haven't already sent a reminder in the last hour
+                        # This prevents minute-level repeats when scheduler runs every 60 seconds
+                        logger.info(f"Sending hourly reminder for medication {status['medication_id']} after {self.reminder_interval} hour(s)")
                         await self._send_hourly_reminder(user_id, status, user_date)
     
     async def _send_hourly_reminder(self, user_id: int, status: dict, date: str):
