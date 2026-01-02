@@ -1,0 +1,185 @@
+"""LLM processing logic for medication bot."""
+
+from typing import Dict, List, Optional
+from loguru import logger
+from llm_client import LLMClient
+from prompts import (
+    get_command_detection_prompt,
+    get_add_command_prompt,
+    get_delete_command_prompt,
+    get_done_command_prompt,
+    get_time_change_command_prompt,
+    get_dose_change_command_prompt,
+    get_timezone_change_command_prompt,
+    get_unknown_command_prompt,
+    get_help_command_prompt,
+    get_confirmation_message_prompt
+)
+
+
+class LLMProcessor:
+    def __init__(self, llm_client: LLMClient):
+        self.llm = llm_client
+    
+    async def classify_intent(self, user_message: str) -> str:
+        """Stage 1: Classify command type.
+        
+        Args:
+            user_message: User's message text
+            
+        Returns:
+            Command type string
+        """
+        prompt = get_command_detection_prompt(user_message)
+        response = await self.llm.complete_json(prompt, user_message)
+        
+        command_type = response.get("command_type", "unknown")
+        logger.info(f"Classified intent: {command_type}")
+        return command_type
+    
+    async def process_add(self, user_message: str) -> List[Dict]:
+        """Parse ADD command.
+        
+        Args:
+            user_message: User's message text
+            
+        Returns:
+            List of medication dictionaries with name, times, and optional dosage
+        """
+        prompt = get_add_command_prompt(user_message)
+        response = await self.llm.complete_json(prompt, user_message)
+        
+        # Expected: [{"medication_name": "...", "times": [...], "dosage": "..."}]
+        return response if isinstance(response, list) else [response]
+    
+    async def process_done(
+        self, 
+        user_message: str, 
+        user_schedule: List[Dict]
+    ) -> Dict:
+        """Parse DONE command with schedule context.
+        
+        Args:
+            user_message: User's message text
+            user_schedule: User's current medication schedule
+            
+        Returns:
+            Dictionary with medication_ids, name, and optional time
+        """
+        prompt = get_done_command_prompt(user_message, user_schedule)
+        response = await self.llm.complete_json(prompt, user_message)
+        
+        # Expected: {"medication_name": "...", "time": "...", "medication_ids": [...]}
+        return response
+    
+    async def process_delete(
+        self,
+        user_message: str,
+        user_schedule: List[Dict]
+    ) -> Dict:
+        """Parse DELETE command.
+        
+        Args:
+            user_message: User's message text
+            user_schedule: User's current medication schedule
+            
+        Returns:
+            Dictionary with status, medication_name, and medication_ids
+        """
+        prompt = get_delete_command_prompt(user_message, user_schedule)
+        response = await self.llm.complete_json(prompt, user_message)
+        
+        # Expected: {"status": "...", "medication_name": "...", "medication_ids": [...]}
+        return response
+    
+    async def process_time_change(
+        self,
+        user_message: str,
+        user_schedule: List[Dict]
+    ) -> Dict:
+        """Parse TIME_CHANGE command.
+        
+        Args:
+            user_message: User's message text
+            user_schedule: User's current medication schedule
+            
+        Returns:
+            Dictionary with status, medication_name, medication_id, and new_times
+        """
+        prompt = get_time_change_command_prompt(user_message, user_schedule)
+        response = await self.llm.complete_json(prompt, user_message)
+        return response
+    
+    async def process_dose_change(
+        self,
+        user_message: str,
+        user_schedule: List[Dict]
+    ) -> Dict:
+        """Parse DOSE_CHANGE command.
+        
+        Args:
+            user_message: User's message text
+            user_schedule: User's current medication schedule
+            
+        Returns:
+            Dictionary with status, medication_name, medication_id, and new_dosage
+        """
+        prompt = get_dose_change_command_prompt(user_message, user_schedule)
+        response = await self.llm.complete_json(prompt, user_message)
+        return response
+    
+    async def process_timezone_change(self, user_message: str) -> Dict:
+        """Parse TIMEZONE_CHANGE command.
+        
+        Args:
+            user_message: User's message text
+            
+        Returns:
+            Dictionary with status and timezone_offset
+        """
+        prompt = get_timezone_change_command_prompt(user_message)
+        response = await self.llm.complete_json(prompt, user_message)
+        return response
+    
+    async def process_unknown(self, user_message: str) -> Dict:
+        """Handle UNKNOWN command.
+        
+        Args:
+            user_message: User's message text
+            
+        Returns:
+            Dictionary with error message
+        """
+        prompt = get_unknown_command_prompt(user_message)
+        response = await self.llm.complete_json(prompt, user_message)
+        return response
+    
+    async def process_help(self) -> Dict:
+        """Handle HELP command.
+        
+        Returns:
+            Dictionary with help message
+        """
+        prompt = get_help_command_prompt()
+        response = await self.llm.complete_json(prompt, "")
+        return response
+    
+    async def generate_confirmation_message(
+        self, 
+        medication_name: str, 
+        medication_time: Optional[str] = None, 
+        dosage: Optional[str] = None
+    ) -> Dict:
+        """Generate personalized confirmation message.
+        
+        Args:
+            medication_name: Name of medication taken
+            medication_time: Time when taken (optional)
+            dosage: Dosage information (optional)
+            
+        Returns:
+            Dictionary with confirmation message
+        """
+        prompt = get_confirmation_message_prompt(medication_name, medication_time, dosage)
+        response = await self.llm.complete_json(prompt, "")
+        return response
