@@ -125,7 +125,7 @@ class MedicationBot:
         
         except Exception as e:
             enhanced_logger.log_error("MESSAGE_PROCESSING", user_id, str(e), {"message_text": text})
-            await message.reply("Произошла ошибка. Попробуйте еще раз.")
+            await self.bot.send_message(message.chat.id, "Произошла ошибка. Попробуйте еще раз.")
         finally:
             # Delete thinking message if it was sent
             if thinking_message_id:
@@ -181,7 +181,7 @@ class MedicationBot:
                                added_count=len(added), duplicates_count=len(duplicates))
         
         with enhanced_logger.timer("TELEGRAM_API_SEND_MESSAGE", user_id, response_text=response):
-            await message.reply(response)
+            await self.bot.send_message(message.chat.id, response)
         
         enhanced_logger.log_info("RESPONSE_SENT_SUCCESS", user_id, "Response sent successfully")
     
@@ -206,7 +206,7 @@ class MedicationBot:
         medication_ids = result.get("medication_ids", [])
         
         if not medication_ids:
-            await message.reply(f"{result['medication_name']} не найден в расписании")
+            await self.bot.send_message(message.chat.id, f"{result['medication_name']} не найден в расписании")
             return
         
         # Mark as taken
@@ -223,7 +223,7 @@ class MedicationBot:
             medications[0].get('dosage') if medications else None
         )
         
-        await message.reply(confirmation.get("message", f"Отмечено: {result['medication_name']} принят ✓"))
+        await self.bot.send_message(message.chat.id, confirmation.get("message", f"Отмечено: {result['medication_name']} принят ✓"))
     
     async def _handle_delete(self, message: Message, text: str, user_id: int):
         """Handle DELETE command.
@@ -248,14 +248,14 @@ class MedicationBot:
         medication_name = result.get("medication_name", "Медикамент")
         
         if status == "clarification_needed":
-            await message.reply(result.get("message", "Пожалуйста, уточните, какой медикамент вы хотите удалить"))
+            await self.bot.send_message(message.chat.id, result.get("message", "Пожалуйста, уточните, какой медикамент вы хотите удалить"))
             return
         elif status == "not_found":
-            await message.reply(f"{medication_name} не найден в расписании")
+            await self.bot.send_message(message.chat.id, f"{medication_name} не найден в расписании")
             return
         elif status == "success":
             if not medication_ids:
-                await message.reply(f"{medication_name} не найден в расписании")
+                await self.bot.send_message(message.chat.id, f"{medication_name} не найден в расписании")
                 return
                 
             # Delete medications
@@ -263,13 +263,13 @@ class MedicationBot:
             
             if deleted_count > 0:
                 if deleted_count == 1:
-                    await message.reply(f"{medication_name} удален из расписания")
+                    await self.bot.send_message(message.chat.id, f"{medication_name} удален из расписания")
                 else:
-                    await message.reply(f"{medication_name} ({deleted_count} записей) удален из расписания")
+                    await self.bot.send_message(message.chat.id, f"{medication_name} ({deleted_count} записей) удален из расписания")
             else:
                 await message.reply(f"Не удалось удалить {medication_name}")
         else:
-            await message.reply("Произошла ошибка при удалении медикамента")
+            await self.bot.send_message(message.chat.id, "Произошла ошибка при удалении медикамента")
     
     async def _handle_time_change(self, message: Message, text: str, user_id: int):
         """Handle TIME_CHANGE command.
@@ -295,19 +295,19 @@ class MedicationBot:
         medication_name = result.get("medication_name", "медикамента")
         
         if status == "clarification_needed":
-            await message.reply(result.get("message", "Пожалуйста, уточните, какой медикамент вы хотите изменить"))
+            await self.bot.send_message(message.chat.id, result.get("message", "Пожалуйста, уточните, какой медикамент вы хотите изменить"))
             return
         elif status == "success":
             if not medication_id or not new_times:
-                await message.reply("Не удалось получить информацию о медикаменте или новом времени")
+                await self.bot.send_message(message.chat.id, "Не удалось получить информацию о медикаменте или новом времени")
                 return
             
             if len(new_times) == 1:
                 # Simple case: update time
                 if await self.db.update_medication_time(medication_id, new_times[0]):
-                    await message.reply(f"Время приема {medication_name} изменено на {new_times[0]}")
+                    await self.bot.send_message(message.chat.id, f"Время приема {medication_name} изменено на {new_times[0]}")
                 else:
-                    await message.reply("Не удалось изменить время приема")
+                    await self.bot.send_message(message.chat.id, "Не удалось изменить время приема")
             else:
                 # Complex case: multiple times - delete old and add new
                 medication = await self.db.get_medication(medication_id)
@@ -328,13 +328,13 @@ class MedicationBot:
                             added_times.append(time)
                     
                     if added_times:
-                        await message.reply(f"Время приема {medication_name} изменено на: {', '.join(added_times)}")
+                        await self.bot.send_message(message.chat.id, f"Время приема {medication_name} изменено на: {', '.join(added_times)}")
                     else:
-                        await message.reply("Не удалось изменить время приема")
+                        await self.bot.send_message(message.chat.id, "Не удалось изменить время приема")
                 else:
-                    await message.reply("Медикамент не найден")
+                    await self.bot.send_message(message.chat.id, "Медикамент не найден")
         else:
-            await message.reply("Произошла ошибка при изменении времени приема")
+            await self.bot.send_message(message.chat.id, "Произошла ошибка при изменении времени приема")
     
     async def _handle_dose_change(self, message: Message, text: str, user_id: int):
         """Handle DOSE_CHANGE command.
@@ -360,19 +360,19 @@ class MedicationBot:
         medication_name = result.get("medication_name", "медикамента")
         
         if status == "clarification_needed":
-            await message.reply(result.get("message", "Пожалуйста, уточните, какой медикамент вы хотите изменить"))
+            await self.bot.send_message(message.chat.id, result.get("message", "Пожалуйста, уточните, какой медикамент вы хотите изменить"))
             return
         elif status == "success":
             if not medication_id or not new_dosage:
-                await message.reply("Не удалось получить информацию о медикаменте или новой дозировке")
+                await self.bot.send_message(message.chat.id, "Не удалось получить информацию о медикаменте или новой дозировке")
                 return
                 
             if await self.db.update_medication_dosage(medication_id, new_dosage):
-                await message.reply(f"Дозировка {medication_name} изменена на {new_dosage}")
+                await self.bot.send_message(message.chat.id, f"Дозировка {medication_name} изменена на {new_dosage}")
             else:
-                await message.reply("Не удалось изменить дозировку")
+                await self.bot.send_message(message.chat.id, "Не удалось изменить дозировку")
         else:
-            await message.reply("Произошла ошибка при изменении дозировки")
+            await self.bot.send_message(message.chat.id, "Произошла ошибка при изменении дозировки")
     
     async def _handle_timezone_change(self, message: Message, text: str, user_id: int):
         """Handle TIMEZONE_CHANGE command.
@@ -390,22 +390,22 @@ class MedicationBot:
         city_name = result.get("city_name", "")
         
         if status == "clarification_needed":
-            await message.reply(result.get("message", "Пожалуйста, уточните часовой пояс"))
+            await self.bot.send_message(message.chat.id, result.get("message", "Пожалуйста, уточните часовой пояс"))
             return
         elif status == "success":
             if not timezone_offset:
-                await message.reply("Не удалось получить информацию о часовом поясе")
+                await self.bot.send_message(message.chat.id, "Не удалось получить информацию о часовом поясе")
                 return
                 
             if await self.db.update_user_timezone(user_id, timezone_offset):
                 if city_name:
-                    await message.reply(f"Часовой пояс изменен на {city_name} ({timezone_offset})")
+                    await self.bot.send_message(message.chat.id, f"Часовой пояс изменен на {city_name} ({timezone_offset})")
                 else:
-                    await message.reply(f"Часовой пояс изменен на {timezone_offset}")
+                    await self.bot.send_message(message.chat.id, f"Часовой пояс изменен на {timezone_offset}")
             else:
-                await message.reply("Не удалось изменить часовой пояс")
+                await self.bot.send_message(message.chat.id, "Не удалось изменить часовой пояс")
         else:
-            await message.reply("Произошла ошибка при изменении часового пояса")
+            await self.bot.send_message(message.chat.id, "Произошла ошибка при изменении часового пояса")
     
     async def _handle_list(self, message: Message, user_id: int):
         """Handle LIST command.
@@ -417,7 +417,7 @@ class MedicationBot:
         medications = await self.db.get_medications(user_id)
         
         if not medications:
-            await message.reply("Ваше расписание пусто. Добавьте медикаменты командой типа \"я принимаю аспирин в 19:00\".")
+            await self.bot.send_message(message.chat.id, "Ваше расписание пусто. Добавьте медикаменты командой типа \"я принимаю аспирин в 19:00\".")
             return
         
         # Sort by time
@@ -428,7 +428,7 @@ class MedicationBot:
             dosage_str = f" ({med['dosage']})" if med["dosage"] else ""
             lines.append(f"• {med['time']} - {med['name'].capitalize()}{dosage_str}")
         
-        await message.reply("\n".join(lines))
+        await self.bot.send_message(message.chat.id, "\n".join(lines))
     
     async def _handle_help(self, message: Message):
         """Handle HELP command.
@@ -437,7 +437,7 @@ class MedicationBot:
             message: Telegram message object
         """
         result = await self.llm.process_help()
-        await message.reply(result.get("message", "Помощь недоступна"))
+        await self.bot.send_message(message.chat.id, result.get("message", "Помощь недоступна"))
     
     async def _handle_unknown(self, message: Message, text: str):
         """Handle UNKNOWN command.
@@ -447,7 +447,7 @@ class MedicationBot:
             text: User's message text
         """
         result = await self.llm.process_unknown(text)
-        await message.reply(result.get("message", "Извините, я не понял команду. Напишите 'помощь' для справки."))
+        await self.bot.send_message(message.chat.id, result.get("message", "Извините, я не понял команду. Напишите 'помощь' для справки."))
     
     async def handle_taken_callback(self, callback: CallbackQuery):
         """Handle 'Принял' button press.
@@ -477,7 +477,7 @@ class MedicationBot:
                     )
                 except Exception:
                     # If can't edit, send new message
-                    await callback.message.reply("✅ Принято")
+                    await self.bot.send_message(callback.message.chat.id, "✅ Принято")
                     
                 await callback.answer("Отмечено!")
             else:
