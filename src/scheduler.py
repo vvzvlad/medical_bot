@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from loguru import logger
 from src.enhanced_logger import get_enhanced_logger
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -13,7 +13,8 @@ from src.timezone_utils import (
     format_date_for_user,
     is_time_to_send_notification,
     should_send_hourly_reminder,
-    is_time_for_next_dose
+    is_time_for_next_dose,
+    parse_timezone_offset
 )
 
 # Initialize enhanced logger
@@ -90,6 +91,35 @@ class NotificationScheduler:
                         # Check if we already have a reminder message ID (meaning we already sent notification)
                         if status and status.get("reminder_message_id"):
                             logger.debug(f"Skipping notification for {med['name']} - already sent today")
+                            continue
+                        
+                        # Additional check: if medication was created after its scheduled time today,
+                        # don't send notification - wait for next cycle
+                        from datetime import datetime, timezone
+                        med_created = med.get("created_at", 0)
+                        med_time = med["time"]  # HH:MM format
+                        
+                        # Parse medication time
+                        med_hour, med_minute = map(int, med_time.split(':'))
+                        
+                        # Get current time in user's timezone
+                        user_now = get_user_current_time(timezone)
+                        
+                        # Create datetime for when medication should have been notified today
+                        scheduled_time = user_now.replace(
+                            hour=med_hour,
+                            minute=med_minute,
+                            second=0,
+                            microsecond=0
+                        )
+                        
+                        # If medication was created after its scheduled time today,
+                        # don't send notification - start from next cycle
+                        created_datetime = datetime.fromtimestamp(med_created, tz=timezone.utc)
+                        created_datetime = created_datetime.astimezone(timezone(parse_timezone_offset(timezone)))
+                        
+                        if created_datetime >= scheduled_time:
+                            logger.debug(f"Skipping notification for {med['name']} - added after scheduled time, will start from next cycle")
                             continue
                         
                         await self._send_notification(user_id, med, user_date)
@@ -291,7 +321,7 @@ class NotificationScheduler:
             user_date = format_date_for_user(timezone)
             
             # Get medications that should have had notifications but didn't
-            missed = await self.db.get_missed_notifications(user_id, user_date)
+            missed = await self.db.get_missed_notifications(user_id, user_date, timezone)
             
             for med in missed:
                 # Check if it's still relevant to send (not too late in the day)
