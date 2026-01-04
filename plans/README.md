@@ -114,7 +114,7 @@ src/
 
 **Fault Tolerance**:
 - After restart: Check database for missed notifications
-- Send missed notifications with "(пропущено)" marker
+- Send missed notifications immediately
 - Resume normal operation from current point
 - No reliance on in-memory state
 

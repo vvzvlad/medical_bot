@@ -342,7 +342,7 @@ When bot restarts or experiences downtime:
 3. Identify missed notifications:
    - Medication time < current time
    - No intake_status record for today OR intake_status.taken_at IS NULL
-4. Send all missed notifications immediately with "(пропущено)" marker
+4. Send all missed notifications immediately
 5. Start hourly reminders from current point
 
 **Multi-Dose Medication Logic**:
@@ -597,7 +597,7 @@ flowchart TD
    - Get current time in user's timezone
    - Query medications with `time <= current_time`
    - Filter: no intake_status for today OR taken_at IS NULL
-4. Send all missed notifications with marker "(пропущено)"
+4. Send all missed notifications immediately
 5. Continue normal operation
 
 **Example**:
@@ -607,7 +607,7 @@ User has medications at:
 - Paracetamol at 18:00 (not yet)
 
 At 15:00 restart:
-→ Send: "Надо принять (пропущено): Aspirin"
+→ Send: "Надо принять: Aspirin"
 → Start hourly reminders for Aspirin
 → At 18:00: Send notification for Paracetamol
 ```

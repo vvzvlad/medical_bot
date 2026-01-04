@@ -258,14 +258,42 @@ class NotificationScheduler:
                         await self._send_hourly_reminder(user_id, status, user_date)
     
     async def _send_hourly_reminder(self, user_id: int, status: dict, date: str):
-        """Send or edit hourly reminder.
+        """Send hourly reminder.
+        
+        Always deletes the old reminder message and sends a fresh one.
         
         Args:
             user_id: Telegram user ID
             status: Intake status dictionary
             date: Date in YYYY-MM-DD format
         """
-        logger.info(f"Sending hourly reminder for medication {status['medication_id']}")
+        start_time = time.time()
+        
+        enhanced_logger.log_scheduler_operation(
+            operation="send_hourly_reminder",
+            user_id=user_id,
+            medication_data={"id": status['medication_id'], "name": status['name']},
+            reason="Hourly reminder for pending medication",
+            scheduled_time=status.get('time', 'unknown')
+        )
+        
+        # Delete the old reminder message if it exists
+        if status.get("reminder_message_id"):
+            try:
+                await self.bot.bot.delete_message(user_id, status["reminder_message_id"])
+                enhanced_logger.log_info(
+                    "DELETED_OLD_REMINDER",
+                    user_id=user_id,
+                    message=f"Deleted old reminder message {status['reminder_message_id']} for {status['name']}"
+                )
+            except Exception as delete_error:
+                # Message might already be deleted or unavailable
+                enhanced_logger.log_warning(
+                    "DELETE_OLD_REMINDER_FAILED",
+                    user_id=user_id,
+                    warning_message=f"Could not delete old reminder message: {delete_error}",
+                    context={"medication_name": status['name']}
+                )
         
         # Format message
         dosage_str = f" ({status['dosage']})" if status.get("dosage") else ""
@@ -279,37 +307,50 @@ class NotificationScheduler:
             )]
         ])
         
-        # Try to edit existing message
-        if status.get("reminder_message_id"):
-            try:
-                await self.bot.bot.edit_message_text(
-                    text,
-                    user_id,
-                    status["reminder_message_id"],
-                    reply_markup=keyboard
-                )
-            except Exception:
-                # Message not found, send new
-                try:
-                    message = await self.bot.bot.send_message(
-                        user_id,
-                        text,
-                        reply_markup=keyboard
-                    )
-                    await self.db.set_reminder_message_id(
-                        user_id,
-                        status["medication_id"],
-                        date,
-                        message.message_id
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to send reminder message: {e}")
+        message_sent = False
+        new_message_id = None
         
-        # Update timestamp
-        await self.db.update_reminder_sent_at(
-            status["id"],
-            int(datetime.utcnow().timestamp())
-        )
+        # Send new reminder message
+        try:
+            message = await self.bot.bot.send_message(
+                user_id,
+                text,
+                reply_markup=keyboard
+            )
+            new_message_id = message.message_id
+            message_sent = True
+            
+            enhanced_logger.log_info(
+                "HOURLY_REMINDER_SENT",
+                user_id=user_id,
+                message=f"Sent new hourly reminder message {new_message_id} for {status['name']}",
+                api_time=time.time() - start_time
+            )
+            
+            # Update message ID in database
+            await self.db.set_reminder_message_id(
+                user_id,
+                status["medication_id"],
+                date,
+                message.message_id
+            )
+        except Exception as e:
+            enhanced_logger.log_error(
+                "HOURLY_REMINDER_SEND_FAILED",
+                user_id=user_id,
+                error_message=f"Failed to send hourly reminder: {e}",
+                context={
+                    "medication_name": status['name'],
+                    "api_time": time.time() - start_time
+                }
+            )
+        
+        # Update timestamp only if message was sent successfully
+        if message_sent:
+            await self.db.update_reminder_sent_at(
+                status["id"],
+                int(datetime.utcnow().timestamp())
+            )
     
     async def _check_missed_notifications(self):
         """Check for missed notifications after downtime."""
