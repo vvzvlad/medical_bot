@@ -227,11 +227,43 @@ class LLMProcessor:
             user_schedule: User's current medication schedule
             
         Returns:
-            Dictionary with status, medication_name, medication_id, and new_dosage
+            Dictionary with status and dose_changes (list of changes) OR clarification_needed
         """
         prompt = get_dose_change_command_prompt(user_message, user_schedule)
         response = await self.llm.complete_json(prompt, user_message)
-        return response
+        
+        # Handle both array response (multiple doses) and object response (clarification/error)
+        if isinstance(response, list):
+            # Array of dose changes
+            # Expected: [{"medication_id": 1, "medication_name": "аспирина", "new_dosage": "100 мг"}, ...]
+            if len(response) == 0:
+                return {"status": "error", "message": "Не удалось определить медикамент"}
+            
+            # Get the medication name from the first item (they should all be the same medication)
+            medication_name = response[0].get("medication_name", "медикамента")
+            
+            return {
+                "status": "success",
+                "medication_name": medication_name,
+                "dose_changes": response
+            }
+        elif isinstance(response, dict):
+            # Check if it's a clarification request or single item
+            if response.get("status") == "clarification_needed":
+                return response
+            
+            # If it's a single dose change in dict format, convert to array format
+            if "medication_id" in response and "new_dosage" in response:
+                return {
+                    "status": "success",
+                    "medication_name": response.get("medication_name", "медикамента"),
+                    "dose_changes": [response]
+                }
+            
+            # Otherwise return as is (might be an error)
+            return response
+        else:
+            return {"status": "error", "message": "Неожиданный формат ответа от LLM"}
     
     async def process_timezone_change(self, user_message: str) -> Dict:
         """Parse TIMEZONE_CHANGE command.

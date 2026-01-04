@@ -422,22 +422,53 @@ class MedicationBot:
         result = await self.llm.process_dose_change(text, schedule)
         
         status = result.get("status", "unknown")
-        medication_id = result.get("medication_id")
-        new_dosage = result.get("new_dosage")
         medication_name = result.get("medication_name", "медикамента")
         
         if status == "clarification_needed":
             await self.bot.send_message(message.chat.id, result.get("message", "Пожалуйста, уточните, какой медикамент вы хотите изменить"))
             return
         elif status == "success":
-            if not medication_id or not new_dosage:
+            dose_changes = result.get("dose_changes", [])
+            
+            if not dose_changes:
                 await self.bot.send_message(message.chat.id, "Не удалось получить информацию о медикаменте или новой дозировке")
                 return
+            
+            # Update dosage for each medication in the list
+            updated_count = 0
+            failed_count = 0
+            new_dosage = None
+            
+            for change in dose_changes:
+                medication_id = change.get("medication_id")
+                dosage = change.get("new_dosage")
                 
-            if await self.db.update_medication_dosage(medication_id, new_dosage):
-                await self.bot.send_message(message.chat.id, f"Дозировка {medication_name} изменена на {new_dosage}")
+                if not medication_id or not dosage:
+                    failed_count += 1
+                    continue
+                
+                # Store dosage for response message (should be same for all)
+                if new_dosage is None:
+                    new_dosage = dosage
+                
+                if await self.db.update_medication_dosage(medication_id, dosage):
+                    updated_count += 1
+                else:
+                    failed_count += 1
+            
+            # Send response
+            if updated_count > 0:
+                if updated_count == 1:
+                    await self.bot.send_message(message.chat.id, f"Дозировка {medication_name} изменена на {new_dosage}")
+                else:
+                    await self.bot.send_message(message.chat.id, f"Дозировка {medication_name} изменена на {new_dosage} ({updated_count} записей)")
+                
+                if failed_count > 0:
+                    await self.bot.send_message(message.chat.id, f"⚠️ Не удалось изменить {failed_count} записей")
             else:
                 await self.bot.send_message(message.chat.id, "Не удалось изменить дозировку")
+        elif status == "error":
+            await self.bot.send_message(message.chat.id, result.get("message", "Произошла ошибка при изменении дозировки"))
         else:
             await self.bot.send_message(message.chat.id, "Произошла ошибка при изменении дозировки")
     
