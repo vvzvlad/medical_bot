@@ -493,7 +493,7 @@ class MedicationBot:
         lines = []
         for med in medications:
             dosage_str = f" ({med['dosage']})" if med["dosage"] else ""
-            lines.append(f" {med['time']}: {med['name'].capitalize()}{dosage_str}")
+            lines.append(f"{med['time']}: {med['name'].capitalize()}{dosage_str}")
         
         await self.bot.send_message(message.chat.id, "\n".join(lines))
     
