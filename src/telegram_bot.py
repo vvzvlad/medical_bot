@@ -24,6 +24,7 @@ class MedicationBot:
         
         # Setup handlers
         router = Router()
+        router.message.register(self.handle_start_command, Command("start"))
         router.message.register(self.handle_message)
         router.callback_query.register(
             self.handle_taken_callback,
@@ -58,6 +59,34 @@ class MedicationBot:
             await self.bot.delete_message(chat_id, message_id)
         except Exception as e:
             logger.error(f"Error deleting thinking message: {e}")
+    
+    async def handle_start_command(self, message: Message):
+        """Handle /start command by showing help.
+        
+        Args:
+            message: Telegram message object
+        """
+        user_id = message.from_user.id
+        
+        # Set user context for detailed logging
+        user_context = {
+            'username': message.from_user.username or 'unknown',
+            'first_name': message.from_user.first_name or '',
+            'last_name': message.from_user.last_name or '',
+            'timezone': 'unknown'
+        }
+        enhanced_logger.set_user_context(user_id, user_context)
+        enhanced_logger.log_info("START_COMMAND", user_id, "User sent /start command")
+        
+        # Ensure user exists
+        user = await self.db.get_user(user_id)
+        if user is None:
+            timezone_offset = settings.default_timezone
+            await self.db.create_user(user_id, timezone_offset)
+            enhanced_logger.log_info("USER_CREATED", user_id, f"New user created with timezone {timezone_offset}")
+        
+        # Show help
+        await self._handle_help(message)
     
     async def handle_message(self, message: Message):
         """Process incoming text message.
