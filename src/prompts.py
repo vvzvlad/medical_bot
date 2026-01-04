@@ -501,12 +501,12 @@ def get_confirmation_message_prompt(medication_name: str, medication_time: str =
 - Поддерживает и мотивирует пользователя
 - Использует естественный, теплый тон
 
-ВАЖНО: Сообщение должно быть коротким (не более 1-2 предложений) и естественным.
+ВАЖНО: Сообщение должно быть коротким (не более 1-2 предложений) и естественным. Не забудь про перенос строки.
 
 Примеры:
-- "Отмечено: {medication_name}{dosage_context} принят{time_context} ✓ Хорошо заботитесь о себе!"
-- "{medication_name.capitalize()}{dosage_context} — принят{time_context} ✓ Спасибо, что следите за своим здоровьем!"
-- "Записала: {medication_name.lower()}{dosage_context} в {medication_time} ✓"
+- "Отмечено: {medication_name}{dosage_context} принят{time_context} \nХорошо заботитесь о себе!"
+- "{medication_name.capitalize()}{dosage_context} — принят{time_context} \nСпасибо, что следите за своим здоровьем!"
+- "Записал: {medication_name.lower()}{dosage_context} в {medication_time} \n"
 
 Ответ должен быть в формате JSON:
 {{"message": "твое сообщение"}}"""
