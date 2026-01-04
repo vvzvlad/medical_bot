@@ -31,7 +31,7 @@ async def test_send_thinking_message():
     message_id = await medication_bot.send_thinking_message(chat_id)
     
     # Verify the thinking message was sent
-    mock_bot.send_message.assert_called_once_with(chat_id, "думаю...")
+    mock_bot.send_message.assert_called_once_with(chat_id, "🤔 Думаю...")
     assert message_id == 123
 
 
@@ -98,7 +98,7 @@ async def test_handle_message_with_thinking_message():
     await medication_bot.handle_message(mock_message)
     
     # Verify thinking message was sent
-    mock_bot.send_message.assert_any_call(456, "думаю...")
+    mock_bot.send_message.assert_any_call(456, "🤔 Думаю...")
     
     # Verify thinking message was deleted
     mock_bot.delete_message.assert_called_once_with(456, 789)
