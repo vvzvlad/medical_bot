@@ -344,9 +344,9 @@ class NotificationScheduler:
                             except Exception as e:
                                 logger.debug(f"Could not delete old missed notification message: {e}")
                         
-                        # Send notification with "пропущено" marker
+                        # Send notification
                         dosage_str = f" ({med['dosage']})" if med.get("dosage") else ""
-                        text = f"Надо принять (пропущено):\n{med['name'].capitalize()}{dosage_str}"
+                        text = f"Надо принять:\n{med['name'].capitalize()}{dosage_str}"
                         
                         # Create button
                         keyboard = InlineKeyboardMarkup(inline_keyboard=[
