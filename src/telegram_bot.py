@@ -41,7 +41,7 @@ class MedicationBot:
             Message ID of the thinking message
         """
         try:
-            message = await self.bot.send_message(chat_id, "🤔 Думаю...")
+            message = await self.bot.send_message(chat_id, "🤔🤔🤔")
             return message.message_id
         except Exception as e:
             logger.error(f"Error sending thinking message: {e}")
@@ -206,17 +206,17 @@ class MedicationBot:
         
         # Format response
         if added and duplicates:
-            response = "Добавлено:\n" + "\n".join(f"✓ {item}" for item in added)
-            response += "\n\nУже в расписании:\n" + "\n".join(f"• {item}" for item in duplicates)
+            response = "Добавлено:\n" + "\n".join(f"✅ {item}" for item in added)
+            response += "\n\nУже в расписании:\n" + "\n".join(f"{item}" for item in duplicates)
         elif added:
-            response = "Добавлено:\n" + "\n".join(f"✓ {item}" for item in added)
+            response = "Добавлено:\n" + "\n".join(f"✅ {item}" for item in added)
         elif duplicates:
-            response = "Уже в расписании:\n" + "\n".join(f"• {item}" for item in duplicates)
+            response = "Уже в расписании:\n" + "\n".join(f"{item}" for item in duplicates)
         else:
             response = "Не удалось добавить медикаменты. Попробуйте переформулировать."
         
         enhanced_logger.log_info("SENDING_RESPONSE", user_id, f"Response: {response}",
-                               added_count=len(added), duplicates_count=len(duplicates))
+                                added_count=len(added), duplicates_count=len(duplicates))
         
         with enhanced_logger.timer("TELEGRAM_API_SEND_MESSAGE", user_id, response_text=response):
             await self.bot.send_message(message.chat.id, response)
@@ -461,10 +461,10 @@ class MedicationBot:
         # Sort by time
         medications.sort(key=lambda m: m["time"])
         
-        lines = ["Ваше расписание:"]
+        lines = []
         for med in medications:
             dosage_str = f" ({med['dosage']})" if med["dosage"] else ""
-            lines.append(f"• {med['time']} - {med['name'].capitalize()}{dosage_str}")
+            lines.append(f" {med['time']}: {med['name'].capitalize()}{dosage_str}")
         
         await self.bot.send_message(message.chat.id, "\n".join(lines))
     

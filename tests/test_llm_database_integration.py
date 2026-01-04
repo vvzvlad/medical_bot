@@ -615,7 +615,6 @@ class TestEndToEndFlows:
         # Verify response
         mock_message.reply.assert_called_once()
         reply_args = mock_message.reply.call_args[0][0]
-        assert "ваше расписание" in reply_args.lower()
         assert "аспирин" in reply_args.lower()
         assert "парацетамол" in reply_args.lower()
 
