@@ -39,16 +39,20 @@ class NotificationScheduler:
         """Start scheduler loop."""
         self.running = True
         logger.info("Scheduler started")
-        
+
         while self.running:
+            tick_start = asyncio.get_event_loop().time()
+
             try:
                 await self._check_and_send_notifications()
                 await self._check_and_send_reminders()
-                await self._check_missed_notifications()
             except Exception as e:
                 logger.error(f"Scheduler error: {e}", exc_info=True)
-            
-            await asyncio.sleep(self.interval)
+
+            # Sleep for remaining time to prevent cumulative drift
+            elapsed = asyncio.get_event_loop().time() - tick_start
+            sleep_time = max(1, self.interval - elapsed)
+            await asyncio.sleep(sleep_time)
     
     def stop(self):
         """Stop scheduler."""
@@ -56,73 +60,71 @@ class NotificationScheduler:
         logger.info("Scheduler stopped")
     
     async def _check_and_send_notifications(self):
-        """Check for medications that need initial notification."""
+        """Check for medications that need initial notification.
+
+        Uses >= time comparison so notifications are never missed due to
+        scheduler drift.  Deduplication is handled via reminder_message_id
+        in the database — once a notification is sent, it won't be sent again.
+        This also covers the former _check_missed_notifications functionality.
+        """
         users = await self.db.get_all_users()
-        
+
         for user in users:
             user_id = user["user_id"]
-            timezone = user["timezone_offset"]
-            user_date = format_date_for_user(timezone)
-            
+            tz_offset = user["timezone_offset"]
+            user_date = format_date_for_user(tz_offset)
+
             medications = await self.db.get_medications(user_id)
-            
+
             for med in medications:
-                # Check if it's time to send notification
-                # First check if we already have an intake status for today
                 status = await self.db.get_intake_status(
-                    user_id,
-                    med["id"],
-                    user_date
+                    user_id, med["id"], user_date
                 )
-                
-                # If no status or not taken yet, check if it's time to send
-                if status is None or (status.get("taken_at") is None):
-                    should_send = is_time_to_send_notification(
-                        med["time"],
-                        timezone,
-                        status.get("taken_at") if status else None,
-                        status.get("reminder_message_id") if status else None
+
+                # Already taken today — skip
+                if status and status.get("taken_at"):
+                    continue
+
+                # Notification already sent today — skip (reminders handled separately)
+                if status and status.get("reminder_message_id"):
+                    continue
+
+                # Check if scheduled time has arrived (>= comparison)
+                should_send = is_time_to_send_notification(
+                    med["time"],
+                    tz_offset,
+                    status.get("taken_at") if status else None,
+                    status.get("reminder_message_id") if status else None
+                )
+
+                if not should_send:
+                    continue
+
+                # Don't send if medication was created after its scheduled time today —
+                # wait for next cycle
+                med_created = med.get("created_at", 0)
+                med_hour, med_minute = map(int, med["time"].split(':'))
+
+                user_now = get_user_current_time(tz_offset)
+                scheduled_time = user_now.replace(
+                    hour=med_hour, minute=med_minute,
+                    second=0, microsecond=0
+                )
+
+                created_dt = datetime.fromtimestamp(
+                    med_created, tz=timezone.utc
+                ).astimezone(
+                    timezone(parse_timezone_offset(tz_offset))
+                )
+
+                if created_dt >= scheduled_time:
+                    logger.debug(
+                        f"Skipping notification for {med['name']} "
+                        f"- added after scheduled time, will start from next cycle"
                     )
-                    
-                    # Implement "next appropriate cycle" logic:
-                    # Only send notification if we haven't already sent one for this medication today
-                    # and it's exactly the scheduled time
-                    if should_send:
-                        # Check if we already have a reminder message ID (meaning we already sent notification)
-                        if status and status.get("reminder_message_id"):
-                            logger.debug(f"Skipping notification for {med['name']} - already sent today")
-                            continue
-                        
-                        # Additional check: if medication was created after its scheduled time today,
-                        # don't send notification - wait for next cycle
-                        from datetime import datetime, timezone
-                        med_created = med.get("created_at", 0)
-                        med_time = med["time"]  # HH:MM format
-                        
-                        # Parse medication time
-                        med_hour, med_minute = map(int, med_time.split(':'))
-                        
-                        # Get current time in user's timezone
-                        user_now = get_user_current_time(timezone)
-                        
-                        # Create datetime for when medication should have been notified today
-                        scheduled_time = user_now.replace(
-                            hour=med_hour,
-                            minute=med_minute,
-                            second=0,
-                            microsecond=0
-                        )
-                        
-                        # If medication was created after its scheduled time today,
-                        # don't send notification - start from next cycle
-                        created_datetime = datetime.fromtimestamp(med_created, tz=timezone.utc)
-                        created_datetime = created_datetime.astimezone(timezone(parse_timezone_offset(timezone)))
-                        
-                        if created_datetime >= scheduled_time:
-                            logger.debug(f"Skipping notification for {med['name']} - added after scheduled time, will start from next cycle")
-                            continue
-                        
-                        await self._send_notification(user_id, med, user_date)
+                    continue
+
+                await self._send_notification(user_id, med, user_date)
     
     async def _send_notification(self, user_id: int, medication: dict, date: str):
         """Send initial notification for medication.
@@ -199,61 +201,59 @@ class NotificationScheduler:
     async def _check_and_send_reminders(self):
         """Check for pending reminders (hourly repeats)."""
         users = await self.db.get_all_users()
-        
+
         for user in users:
             user_id = user["user_id"]
-            timezone = user["timezone_offset"]
-            user_date = format_date_for_user(timezone)
-            
+            tz_offset = user["timezone_offset"]
+            user_date = format_date_for_user(tz_offset)
+
             # Get pending reminders
             pending = await self.db.get_pending_reminders(user_id, user_date)
-            
+
             for status in pending:
                 # Check if it's time for next dose (auto-mark current as taken)
                 medications = await self.db.get_medications(user_id)
                 current_med = next((m for m in medications if m["id"] == status["medication_id"]), None)
-                
+
                 if current_med:
                     # Check if there's a next dose of the same medication
                     same_meds = [m for m in medications if m["name"] == current_med["name"]]
                     same_meds.sort(key=lambda m: m["time"])
-                    
+
                     # Find next dose
                     next_med = None
                     for i, med in enumerate(same_meds):
                         if med["id"] == current_med["id"] and i < len(same_meds) - 1:
                             next_med = same_meds[i + 1]
                             break
-                    
+
                     if next_med:
                         # Check if it's time for next dose
-                        if is_time_for_next_dose(current_med["time"], next_med["time"], timezone):
+                        if is_time_for_next_dose(current_med["time"], next_med["time"], tz_offset):
                             # Auto-mark current dose as taken
-                            now = int(datetime.utcnow().timestamp())
+                            now = int(datetime.now(timezone.utc).timestamp())
                             await self.db.mark_as_taken(user_id, current_med["id"], user_date, now)
-                            
+
                             # Delete old reminder message
                             if status.get("reminder_message_id"):
                                 try:
                                     await self.bot.bot.delete_message(user_id, status["reminder_message_id"])
                                 except Exception:
                                     pass  # Message might already be deleted
-                            
+
                             # Send notification for next dose
                             await self._send_notification(user_id, next_med, user_date)
                             continue  # Skip hourly reminder for current dose
-                
-                # Check if hour has passed since last reminder
+
+                # Check if enough time has passed since last reminder
                 if status.get("reminder_sent_at"):
                     should_remind = should_send_hourly_reminder(
                         status["reminder_sent_at"],
-                        int(datetime.utcnow().timestamp()),
+                        int(datetime.now(timezone.utc).timestamp()),
                         self.reminder_interval
                     )
-                    
+
                     if should_remind:
-                        # Additional gating: ensure we haven't already sent a reminder in the last hour
-                        # This prevents minute-level repeats when scheduler runs every 60 seconds
                         logger.info(f"Sending hourly reminder for medication {status['medication_id']} after {self.reminder_interval} hour(s)")
                         await self._send_hourly_reminder(user_id, status, user_date)
     
@@ -349,75 +349,6 @@ class NotificationScheduler:
         if message_sent:
             await self.db.update_reminder_sent_at(
                 status["id"],
-                int(datetime.utcnow().timestamp())
+                int(datetime.now(timezone.utc).timestamp())
             )
     
-    async def _check_missed_notifications(self):
-        """Check for missed notifications after downtime."""
-        users = await self.db.get_all_users()
-        
-        for user in users:
-            user_id = user["user_id"]
-            timezone = user["timezone_offset"]
-            user_date = format_date_for_user(timezone)
-            
-            # Get medications that should have had notifications but didn't
-            missed = await self.db.get_missed_notifications(user_id, user_date, timezone)
-            
-            for med in missed:
-                # Check if it's still relevant to send (not too late in the day)
-                user_time = get_user_current_time(timezone)
-                med_hour, med_minute = map(int, med["time"].split(":"))
-                
-                # If it's still the same day and before 23:59, send missed notification
-                if user_time.hour < 23 or (user_time.hour == 23 and user_time.minute < 59):
-                    # Check if we haven't already sent a reminder today
-                    status = await self.db.get_intake_status(user_id, med["id"], user_date)
-                    
-                    if not status or not status.get("reminder_message_id"):
-                        logger.info(f"Sending missed notification for {med['name']} to user {user_id}")
-                        
-                        # Delete old notification if it exists
-                        if status and status.get("reminder_message_id"):
-                            try:
-                                await self.bot.bot.delete_message(user_id, status["reminder_message_id"])
-                                logger.debug(f"Deleted old missed notification message {status['reminder_message_id']} for {med['name']}")
-                            except Exception as e:
-                                logger.debug(f"Could not delete old missed notification message: {e}")
-                        
-                        # Send notification
-                        dosage_str = f" ({med['dosage']})" if med.get("dosage") else ""
-                        text = f"Надо принять:\n{med['name'].capitalize()}{dosage_str}"
-                        
-                        # Create button
-                        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                            [InlineKeyboardButton(
-                                text="Принял",
-                                callback_data=f"taken:{med['id']}:{user_date}"
-                            )]
-                        ])
-                        
-                        try:
-                            message = await self.bot.bot.send_message(
-                                user_id,
-                                text,
-                                reply_markup=keyboard
-                            )
-                            
-                            # Create or update intake_status record
-                            if status:
-                                await self.db.set_reminder_message_id(
-                                    user_id,
-                                    med["id"],
-                                    user_date,
-                                    message.message_id
-                                )
-                            else:
-                                await self.db.create_intake_status(
-                                    user_id,
-                                    med["id"],
-                                    user_date,
-                                    message.message_id
-                                )
-                        except Exception as e:
-                            logger.error(f"Failed to send missed notification: {e}")

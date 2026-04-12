@@ -77,10 +77,12 @@ def is_time_to_send_notification(
     
     user_now = get_user_current_time(user_timezone)
     med_hour, med_minute = map(int, medication_time.split(':'))
-    
-    # Check if current time exactly matches medication time (within the same minute)
-    # This prevents notifications from triggering immediately when time conditions are met
-    return user_now.hour == med_hour and user_now.minute == med_minute
+
+    # Check if current time has reached or passed the medication scheduled time.
+    # Deduplication (not sending twice) is handled by the caller via database state
+    # (reminder_message_id). This ensures notifications are never missed due to
+    # scheduler drift or processing delays.
+    return (user_now.hour, user_now.minute) >= (med_hour, med_minute)
 
 
 def should_send_hourly_reminder(
@@ -104,18 +106,12 @@ def should_send_hourly_reminder(
     # Ensure we have a valid timestamp
     if reminder_sent_at <= 0:
         return True
-    
-    # Calculate time difference in hours
+
+    # Check if enough time has passed since the last reminder.
+    # The caller is responsible for updating reminder_sent_at after each send,
+    # which resets the timer and prevents duplicate sends within the same interval.
     hours_passed = (current_timestamp - reminder_sent_at) / 3600
-    
-    # Add proper gating: only send if we've just crossed the interval boundary
-    # This prevents minute-level repeats when scheduler runs every 60 seconds
-    # We want to send only once per hour, at the exact hour mark
-    # Use a more precise check: only allow if we're within the first few minutes
-    # after crossing the boundary, but not throughout the entire hour
-    hours_elapsed = int(hours_passed)
-    # Only send if we've crossed the boundary but not gone too far (within first 5 minutes)
-    return hours_elapsed >= interval_hours and (hours_passed - hours_elapsed) < 0.1
+    return hours_passed >= interval_hours
 
 
 def is_time_for_next_dose(
