@@ -3,6 +3,8 @@
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
 from datetime import datetime
 from loguru import logger
 from src.enhanced_logger import get_enhanced_logger
@@ -17,7 +19,12 @@ enhanced_logger = get_enhanced_logger()
 
 class MedicationBot:
     def __init__(self, llm_processor: LLMProcessor, database: Database):
-        self.bot = Bot(token=settings.telegram_bot_token)
+        session = None
+        if settings.telegram_bot_api_server:
+            session = AiohttpSession(
+                api=TelegramAPIServer.from_base(settings.telegram_bot_api_server)
+            )
+        self.bot = Bot(token=settings.telegram_bot_token, session=session)
         self.dp = Dispatcher()
         self.llm = llm_processor
         self.db = database

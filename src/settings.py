@@ -15,6 +15,7 @@ class Settings:
         
         # Telegram
         self.telegram_bot_token = self._get_required("TELEGRAM_BOT_TOKEN")
+        self.telegram_bot_api_server = self._get("TELEGRAM_BOT_API_SERVER", "")
         
         # Groq LLM
         self.groq_api_key = self._get_required("GROQ_API_KEY")
