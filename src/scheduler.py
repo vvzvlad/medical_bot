@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from loguru import logger
 from src.enhanced_logger import get_enhanced_logger
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -207,8 +207,12 @@ class NotificationScheduler:
             tz_offset = user["timezone_offset"]
             user_date = format_date_for_user(tz_offset)
 
-            # Get pending reminders
-            pending = await self.db.get_pending_reminders(user_id, user_date)
+            # Also check yesterday's pending reminders (to continue past midnight)
+            user_now = get_user_current_time(tz_offset)
+            yesterday = (user_now - timedelta(days=1)).strftime("%Y-%m-%d")
+
+            # Get pending reminders (today and yesterday)
+            pending = await self.db.get_pending_reminders(user_id, user_date, yesterday)
 
             for status in pending:
                 # Check if it's time for next dose (auto-mark current as taken)
@@ -230,9 +234,9 @@ class NotificationScheduler:
                     if next_med:
                         # Check if it's time for next dose
                         if is_time_for_next_dose(current_med["time"], next_med["time"], tz_offset):
-                            # Auto-mark current dose as taken
+                            # Auto-mark current dose as taken (use status["date"] — may be yesterday)
                             now = int(datetime.now(timezone.utc).timestamp())
-                            await self.db.mark_as_taken(user_id, current_med["id"], user_date, now)
+                            await self.db.mark_as_taken(user_id, current_med["id"], status["date"], now)
 
                             # Delete old reminder message
                             if status.get("reminder_message_id"):
@@ -241,7 +245,7 @@ class NotificationScheduler:
                                 except Exception:
                                     pass  # Message might already be deleted
 
-                            # Send notification for next dose
+                            # Send notification for next dose (always on today's date)
                             await self._send_notification(user_id, next_med, user_date)
                             continue  # Skip hourly reminder for current dose
 
@@ -255,7 +259,8 @@ class NotificationScheduler:
 
                     if should_remind:
                         logger.info(f"Sending hourly reminder for medication {status['medication_id']} after {self.reminder_interval} hour(s)")
-                        await self._send_hourly_reminder(user_id, status, user_date)
+                        # Use status["date"] so the "Принял" button marks the correct record
+                        await self._send_hourly_reminder(user_id, status, status["date"])
     
     async def _send_hourly_reminder(self, user_id: int, status: dict, date: str):
         """Send hourly reminder.

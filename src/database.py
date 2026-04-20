@@ -475,12 +475,16 @@ class Database:
             await db.commit()
             return cursor.rowcount > 0
     
-    async def get_pending_reminders(self, user_id: int, date: str) -> List[Dict[str, Any]]:
-        """Get pending reminders for user.
+    async def get_pending_reminders(self, user_id: int, date: str, yesterday: str) -> List[Dict[str, Any]]:
+        """Get pending reminders for user (today and yesterday).
+
+        Includes yesterday so reminders continue past midnight until the next
+        scheduled dose time arrives.
         
         Args:
             user_id: Telegram user ID
-            date: Date in YYYY-MM-DD format
+            date: Today's date in YYYY-MM-DD format
+            yesterday: Yesterday's date in YYYY-MM-DD format
             
         Returns:
             List of pending reminder dictionaries
@@ -491,8 +495,8 @@ class Database:
                 "SELECT i.*, m.name, m.time, m.dosage "
                 "FROM intake_status i "
                 "JOIN medications m ON i.medication_id = m.id "
-                "WHERE i.user_id = ? AND i.date = ? AND i.taken_at IS NULL",
-                (user_id, date)
+                "WHERE i.user_id = ? AND i.date IN (?, ?) AND i.taken_at IS NULL",
+                (user_id, date, yesterday)
             )
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
@@ -509,69 +513,3 @@ class Database:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
     
-    async def get_missed_notifications(self, user_id: int, date: str, user_timezone: str) -> List[Dict[str, Any]]:
-        """Get medications that should have had notifications but didn't.
-        
-        Args:
-            user_id: Telegram user ID
-            date: Date in YYYY-MM-DD format
-            user_timezone: User's timezone offset like '+03:00'
-            
-        Returns:
-            List of medication dictionaries that missed notifications
-        """
-        from src.timezone_utils import get_user_current_time, parse_timezone_offset
-        from datetime import datetime, timezone
-        
-        async with aiosqlite.connect(self.db_path) as db:
-            db.row_factory = aiosqlite.Row
-            # Get current time in user's timezone
-            user_now = get_user_current_time(user_timezone)
-            current_time_str = user_now.strftime('%H:%M')
-            
-            # Only get medications that:
-            # 1. Have scheduled time <= current time (time has passed)
-            # 2. No intake status record or not taken
-            # 3. No reminder message ID (no notification sent)
-            cursor = await db.execute("""
-                SELECT m.*, i.taken_at, i.reminder_message_id
-                FROM medications m
-                LEFT JOIN intake_status i ON m.id = i.medication_id AND i.date = ?
-                WHERE m.user_id = ?
-                AND m.time <= ?
-                AND (i.taken_at IS NULL OR i.taken_at = 0)
-                AND i.reminder_message_id IS NULL
-                ORDER BY m.time
-            """, (date, user_id, current_time_str))
-            rows = await cursor.fetchall()
-            
-            # Filter out medications that were added after their scheduled time for today
-            # They should start notifications from the next appropriate cycle
-            filtered_rows = []
-            for row in rows:
-                med_time = row['time']  # HH:MM format
-                med_created = row['created_at']  # Unix timestamp
-                
-                # Parse medication time
-                med_hour, med_minute = map(int, med_time.split(':'))
-                
-                # Create datetime for when medication should have been notified today
-                scheduled_time = user_now.replace(
-                    hour=med_hour,
-                    minute=med_minute,
-                    second=0,
-                    microsecond=0
-                )
-                
-                # If medication was created after its scheduled time today,
-                # it shouldn't be considered "missed" - it should start from next cycle
-                created_datetime = datetime.fromtimestamp(med_created, tz=timezone.utc)
-                created_datetime = created_datetime.astimezone(timezone(parse_timezone_offset(user_timezone)))
-                
-                # Only consider as "missed" if medication existed before its scheduled time
-                # If medication was created after scheduled time, it should start from next cycle
-                if created_datetime < scheduled_time:
-                    # Medication existed before its scheduled time, so it was truly missed
-                    filtered_rows.append(row)
-            
-            return [dict(row) for row in filtered_rows]
