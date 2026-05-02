@@ -118,24 +118,24 @@ class TestTimeReachedMatching:
 
 
 class TestHourlyReminderGating:
-    """Test cases for preventing minute-level repeats in hourly reminders."""
+    """Test cases for preventing sub-interval repeats in reminders."""
     
-    def test_hourly_reminder_sent_after_exact_interval(self):
-        """Test that hourly reminder is sent after exactly 1 hour."""
+    def test_reminder_sent_after_exact_interval(self):
+        """Test that reminder is sent after exactly 60 minutes."""
         # Current time: 12:00:00
         current_timestamp = int(datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc).timestamp())
-        # Last reminder sent at: 11:00:00 (exactly 1 hour ago)
+        # Last reminder sent at: 11:00:00 (exactly 60 minutes ago)
         reminder_sent_at = int(datetime(2024, 1, 1, 11, 0, 0, tzinfo=timezone.utc).timestamp())
         
         result = should_send_hourly_reminder(
             reminder_sent_at=reminder_sent_at,
             current_timestamp=current_timestamp,
-            interval_hours=1
+            interval_minutes=60
         )
         assert result is True
     
-    def test_hourly_reminder_not_sent_within_same_hour(self):
-        """Test that hourly reminder is NOT sent within the same hour."""
+    def test_reminder_not_sent_within_same_interval(self):
+        """Test that reminder is NOT sent within the same 60-minute interval."""
         # Current time: 11:30:00
         current_timestamp = int(datetime(2024, 1, 1, 11, 30, 0, tzinfo=timezone.utc).timestamp())
         # Last reminder sent at: 11:05:00 (25 minutes ago)
@@ -144,7 +144,7 @@ class TestHourlyReminderGating:
         result = should_send_hourly_reminder(
             reminder_sent_at=reminder_sent_at,
             current_timestamp=current_timestamp,
-            interval_hours=1
+            interval_minutes=60
         )
         assert result is False
     
@@ -156,7 +156,7 @@ class TestHourlyReminderGating:
         # First reminder sent at 11:00:00
         reminder_sent_at = int(base_time.timestamp())
         
-        # Test multiple scheduler runs within the same hour
+        # Test multiple scheduler runs within the same 60-minute interval
         for minute in range(1, 60):  # 11:01 to 11:59
             current_time = base_time + timedelta(minutes=minute)
             current_timestamp = int(current_time.timestamp())
@@ -164,38 +164,38 @@ class TestHourlyReminderGating:
             result = should_send_hourly_reminder(
                 reminder_sent_at=reminder_sent_at,
                 current_timestamp=current_timestamp,
-                interval_hours=1
+                interval_minutes=60
             )
-            # Should NOT send reminder within the same hour
+            # Should NOT send reminder within the same interval
             assert result is False, f"Reminder should not be sent at {current_time.strftime('%H:%M')}"
     
-    def test_next_hour_reminder_works(self):
-        """Test that reminder is sent in the next hour."""
+    def test_next_interval_reminder_works(self):
+        """Test that reminder is sent after the interval elapses."""
         # First reminder sent at 11:00:00
         reminder_sent_at = int(datetime(2024, 1, 1, 11, 0, 0, tzinfo=timezone.utc).timestamp())
         
-        # Test at 12:00:00 (exactly 1 hour later)
+        # Test at 12:00:00 (exactly 60 minutes later)
         current_timestamp = int(datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc).timestamp())
         
         result = should_send_hourly_reminder(
             reminder_sent_at=reminder_sent_at,
             current_timestamp=current_timestamp,
-            interval_hours=1
+            interval_minutes=60
         )
         assert result is True
     
-    def test_multiple_hour_intervals(self):
-        """Test reminder intervals longer than 1 hour."""
+    def test_multiple_minute_intervals(self):
+        """Test reminder intervals of 120 minutes."""
         # First reminder sent at 11:00:00
         reminder_sent_at = int(datetime(2024, 1, 1, 11, 0, 0, tzinfo=timezone.utc).timestamp())
         
-        # Test 2-hour interval
+        # Test 2-hour (120-minute) interval
         current_timestamp = int(datetime(2024, 1, 1, 13, 0, 0, tzinfo=timezone.utc).timestamp())
         
         result = should_send_hourly_reminder(
             reminder_sent_at=reminder_sent_at,
             current_timestamp=current_timestamp,
-            interval_hours=2
+            interval_minutes=120
         )
         assert result is True
     
@@ -204,13 +204,13 @@ class TestHourlyReminderGating:
         # First reminder sent at 11:00:00
         reminder_sent_at = int(datetime(2024, 1, 1, 11, 0, 0, tzinfo=timezone.utc).timestamp())
         
-        # Test at 12:00:00 (exactly 3600 seconds later)
+        # Test at exactly 60 minutes later (3600 seconds)
         current_timestamp = reminder_sent_at + 3600
         
         result = should_send_hourly_reminder(
             reminder_sent_at=reminder_sent_at,
             current_timestamp=current_timestamp,
-            interval_hours=1
+            interval_minutes=60
         )
         assert result is True
     
@@ -220,7 +220,7 @@ class TestHourlyReminderGating:
         result = should_send_hourly_reminder(
             reminder_sent_at=0,
             current_timestamp=int(datetime.utcnow().timestamp()),
-            interval_hours=1
+            interval_minutes=30
         )
         assert result is True
 
@@ -352,35 +352,35 @@ class TestSchedulerIntegration:
                     f"(deduplication is the caller's job)"
                 )
 
-    def test_hourly_reminder_with_send_reset_cycle(self):
-        """Test hourly reminders with the realistic send-and-reset cycle.
+    def test_reminder_with_send_reset_cycle(self):
+        """Test reminders with the realistic send-and-reset cycle.
 
         After each send the caller updates reminder_sent_at, resetting the
-        timer.  This test simulates that cycle.
+        timer.  This test simulates that cycle using a 60-minute interval.
         """
         base_time = datetime(2024, 1, 1, 11, 0, 0, tzinfo=timezone.utc)
         reminder_sent_at = int(base_time.timestamp())
 
-        # Minutes 1-59: not yet 1 hour → False
+        # Minutes 1-59: not yet 60 minutes → False
         for minute in range(1, 60):
             ts = int((base_time + timedelta(minutes=minute)).timestamp())
-            assert should_send_hourly_reminder(reminder_sent_at, ts, 1) is False
+            assert should_send_hourly_reminder(reminder_sent_at, ts, 60) is False
 
-        # Minute 60: exactly 1 hour → True (send, then reset)
+        # Minute 60: exactly 60 minutes → True (send, then reset)
         ts_60 = int((base_time + timedelta(minutes=60)).timestamp())
-        assert should_send_hourly_reminder(reminder_sent_at, ts_60, 1) is True
+        assert should_send_hourly_reminder(reminder_sent_at, ts_60, 60) is True
 
         # Simulate reset: caller updates reminder_sent_at to now
         reminder_sent_at = ts_60
 
-        # Minutes 61-119: not yet 1 hour from new base → False
+        # Minutes 61-119: not yet 60 minutes from new base → False
         for minute in range(61, 120):
             ts = int((base_time + timedelta(minutes=minute)).timestamp())
-            assert should_send_hourly_reminder(reminder_sent_at, ts, 1) is False
+            assert should_send_hourly_reminder(reminder_sent_at, ts, 60) is False
 
-        # Minute 120: exactly 1 hour from reset → True
+        # Minute 120: exactly 60 minutes from reset → True
         ts_120 = int((base_time + timedelta(minutes=120)).timestamp())
-        assert should_send_hourly_reminder(reminder_sent_at, ts_120, 1) is True
+        assert should_send_hourly_reminder(reminder_sent_at, ts_120, 60) is True
 
 
 class TestEdgeCases:

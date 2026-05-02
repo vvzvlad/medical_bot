@@ -60,7 +60,7 @@ async def main():
         database=database,
         bot=bot,
         interval_seconds=settings.scheduler_interval,
-        reminder_interval_hours=settings.reminder_interval_hours
+        reminder_interval_minutes=settings.reminder_interval_minutes
     )
     
     # Start scheduler and bot concurrently

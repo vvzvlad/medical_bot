@@ -23,16 +23,16 @@ enhanced_logger = get_enhanced_logger()
 
 class NotificationScheduler:
     def __init__(
-        self, 
-        database: Database, 
+        self,
+        database: Database,
         bot: MedicationBot,
         interval_seconds: int = 60,
-        reminder_interval_hours: int = 1
+        reminder_interval_minutes: int = 30
     ):
         self.db = database
         self.bot = bot
         self.interval = interval_seconds
-        self.reminder_interval = reminder_interval_hours
+        self.reminder_interval = reminder_interval_minutes
         self.running = False
     
     async def start(self):
@@ -258,7 +258,7 @@ class NotificationScheduler:
                     )
 
                     if should_remind:
-                        logger.info(f"Sending hourly reminder for medication {status['medication_id']} after {self.reminder_interval} hour(s)")
+                        logger.info(f"Sending reminder for medication {status['medication_id']} after {self.reminder_interval} minute(s)")
                         # Use status["date"] so the "Принял" button marks the correct record
                         await self._send_hourly_reminder(user_id, status, status["date"])
     

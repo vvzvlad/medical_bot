@@ -27,7 +27,7 @@ class Settings:
         self.log_level = self._get("LOG_LEVEL", "INFO")
         self.database_path = Path(self._get("DATABASE_PATH", "data/medications.db"))
         self.scheduler_interval = int(self._get("SCHEDULER_INTERVAL_SECONDS", "60"))
-        self.reminder_interval_hours = int(self._get("REMINDER_REPEAT_INTERVAL_HOURS", "1"))
+        self.reminder_interval_minutes = int(self._get("REMINDER_REPEAT_INTERVAL_MINUTES", "30"))
         self.default_timezone = self._get("DEFAULT_TIMEZONE_OFFSET", "+03:00")
         
         # Ensure data directory exists

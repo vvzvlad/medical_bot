@@ -88,17 +88,17 @@ def is_time_to_send_notification(
 def should_send_hourly_reminder(
     reminder_sent_at: int,  # Unix timestamp
     current_timestamp: Optional[int] = None,
-    interval_hours: int = 1
+    interval_minutes: int = 30
 ) -> bool:
-    """Check if hourly reminder should be sent.
+    """Check if periodic reminder should be sent.
     
     Args:
         reminder_sent_at: Unix timestamp when last reminder was sent
         current_timestamp: Current Unix timestamp (defaults to now)
-        interval_hours: Hours between reminders (default 1)
+        interval_minutes: Minutes between reminders (default 30)
         
     Returns:
-        True if hourly reminder should be sent, False otherwise
+        True if reminder should be sent, False otherwise
     """
     if current_timestamp is None:
         current_timestamp = int(datetime.utcnow().timestamp())
@@ -110,8 +110,8 @@ def should_send_hourly_reminder(
     # Check if enough time has passed since the last reminder.
     # The caller is responsible for updating reminder_sent_at after each send,
     # which resets the timer and prevents duplicate sends within the same interval.
-    hours_passed = (current_timestamp - reminder_sent_at) / 3600
-    return hours_passed >= interval_hours
+    minutes_passed = (current_timestamp - reminder_sent_at) / 60
+    return minutes_passed >= interval_minutes
 
 
 def is_time_for_next_dose(
